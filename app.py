@@ -135,36 +135,28 @@ def is_this_week(dt_str: str) -> bool:
     except: return False
 
 # ── 自動儲存函式 ──────────────────────────────────────────
-def do_save(sec: str, original_df: pd.DataFrame, new_df: pd.DataFrame) -> int:
-    """比對並儲存有變動的列，回傳儲存筆數"""
+def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
+    """
+    處理 data_editor 的 session_state 格式：
+    {"edited_rows": {str(row_idx): {col: val}},
+     "added_rows":  [{col: val}],
+     "deleted_rows":[row_idx]}
+    """
+    if not isinstance(editor_state, dict):
+        return 0
     saved = 0
-    compare_cols = [c for c in DISPLAY_COLS if c in new_df.columns]
+    now_iso = datetime.now().isoformat()
 
-    for i, row in new_df.iterrows():
-        # 比對是否有變動
-        changed = True
-        if i < len(original_df):
-            old_row = original_df.iloc[i]
-            old_vals = [str(old_row.get(c,"")) for c in compare_cols]
-            new_vals = [str(row.get(c,"")) for c in compare_cols]
-            old_zh   = str(old_row.get("status_zh",""))
-            new_zh   = str(row.get("status_zh",""))
-            changed  = (old_vals != new_vals) or (old_zh != new_zh)
-
-        if not changed:
-            continue
-
+    def build_row_dict(base_row: pd.Series, changes: dict) -> dict:
+        merged = base_row.to_dict()
+        merged.update(changes)
         row_dict = {k: ("" if pd.isna(v) or str(v) in ["None","nan","NaN",""] else str(v))
-                    for k,v in row.items()}
-        row_dict["section"] = sec
-        row_dict["updated_at"] = datetime.now().isoformat()
-
-        # ✅ 從中文下拉轉回英文 key
+                    for k, v in merged.items()}
+        row_dict["section"]    = sec
+        row_dict["updated_at"] = now_iso
         zh_label = row_dict.pop("status_zh", "")
         if zh_label in STATUS_ZH_TO_KEY:
             row_dict["status_type"] = STATUS_ZH_TO_KEY[zh_label]
-
-        # 備援：從 status 文字推斷 status_type
         if not row_dict.get("status_type"):
             s = row_dict.get("status","")
             if "製作中" in s and "停工" not in s: row_dict["status_type"] = "in_progress"
@@ -172,16 +164,43 @@ def do_save(sec: str, original_df: pd.DataFrame, new_df: pd.DataFrame) -> int:
             elif "停工" in s:  row_dict["status_type"] = "suspended"
             elif "交站" in s or row_dict.get("completion") == "100%": row_dict["status_type"] = "completed"
             else: row_dict["status_type"] = "not_started"
+        return row_dict
 
-        record_id = row_dict.pop("id", None)
+    # 1. 修改的列
+    for row_idx, changes in editor_state.get("edited_rows", {}).items():
         try:
+            idx = int(row_idx)
+            if idx >= len(original_df): continue
+            row_dict   = build_row_dict(original_df.iloc[idx], changes)
+            record_id  = row_dict.pop("id", None)
             if record_id and str(record_id) not in ("", "None"):
                 supabase.table("projects").update(row_dict).eq("id", record_id).execute()
-            else:
-                supabase.table("projects").insert(row_dict).execute()
+                saved += 1
+        except Exception as e:
+            st.toast(f"⚠️ 更新失敗 row {row_idx}：{e}", icon="❌")
+
+    # 2. 新增的列
+    for new_row in editor_state.get("added_rows", []):
+        try:
+            empty    = pd.Series({c: "" for c in original_df.columns})
+            row_dict = build_row_dict(empty, new_row)
+            row_dict.pop("id", None)
+            supabase.table("projects").insert(row_dict).execute()
             saved += 1
         except Exception as e:
-            st.toast(f"⚠️ 儲存失敗：{e}", icon="❌")
+            st.toast(f"⚠️ 新增失敗：{e}", icon="❌")
+
+    # 3. 刪除的列（標記 closed 而非真刪）
+    for row_idx in editor_state.get("deleted_rows", []):
+        try:
+            idx       = int(row_idx)
+            record_id = str(original_df.iloc[idx].get("id","")) if idx < len(original_df) else ""
+            if record_id and record_id not in ("","None"):
+                supabase.table("projects").update({"closed":"已刪除"}).eq("id", record_id).execute()
+                saved += 1
+        except Exception as e:
+            st.toast(f"⚠️ 刪除失敗 row {row_idx}：{e}", icon="❌")
+
     return saved
 
 # ── 標題 ──────────────────────────────────────────────────
