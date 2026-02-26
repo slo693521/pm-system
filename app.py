@@ -64,7 +64,7 @@ supabase = get_supabase()
 
 @st.cache_data(ttl=15)
 def load_data() -> pd.DataFrame:
-    res = supabase.table("projects").select("*").order("id").execute()
+    res = supabase.table("projects").select("*").order("id", desc=True).execute()
     if not res.data: return pd.DataFrame()
     df = pd.DataFrame(res.data)
     for col in df.columns:
@@ -391,48 +391,6 @@ with page_tab1:
                      height=min(420, 38+len(df_sec)*35),
                      column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
 
-        # ── ➕ 新增工程案（放在最上方）────────────────────────
-        with st.expander(f"➕ 新增工程案到【{sec}】"):
-            with st.form(key=f"add_{sec}"):
-                na1, na2, na3 = st.columns(3)
-                with na1:
-                    n_case_no      = st.text_input("案號")
-                    n_project_name = st.text_input("工程名稱")
-                    n_client       = st.text_input("業主")
-                with na2:
-                    n_status    = st.text_input("施工順序")
-                    n_completion= st.text_input("完成率", placeholder="例：50%")
-                    n_status_zh = st.selectbox("狀態", STATUS_ZH_OPTIONS)
-                with na3:
-                    n_handover      = st.text_input("交站日期")
-                    n_handover_year = st.selectbox("年份", ["","114","115","116"])
-                    n_contact       = st.text_input("對應窗口")
-                n_tracking = st.text_input("備註")
-                n_materials= st.text_input("備料")
-                if st.form_submit_button("✅ 新增（新增至最上方）", type="primary"):
-                    new_row = {
-                        "section":       sec,
-                        "case_no":       n_case_no,
-                        "project_name":  n_project_name,
-                        "client":        n_client,
-                        "status":        n_status,
-                        "completion":    n_completion,
-                        "status_type":   STATUS_ZH_TO_KEY.get(n_status_zh, "not_started"),
-                        "handover":      n_handover,
-                        "handover_year": n_handover_year,
-                        "contact":       n_contact,
-                        "tracking":      n_tracking,
-                        "materials":     n_materials,
-                        "updated_at":    datetime.now().isoformat(),
-                    }
-                    try:
-                        supabase.table("projects").insert(new_row).execute()
-                        st.success(f"✅ 已新增「{n_project_name}」！")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"新增失敗：{e}")
-
         # ── 自動儲存編輯區 ──────────────────────────────────
         with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
 
@@ -458,14 +416,14 @@ with page_tab1:
                 column_config={k:v for k,v in COL_CONFIG.items()
                                if k in edit_df.columns or k == "status_zh"},
                 use_container_width=True,
-                num_rows="fixed",
+                num_rows="dynamic",
                 hide_index=True,
                 column_order=["status_zh","status","completion","materials","case_no",
                               "project_name","client","tracking","drawing","pipe_support",
                               "welding","nde","sandblast","assembly","painting",
                               "pressure_test","handover","handover_year","contact"],
             )
-            st.caption("💡 修改欄位後點擊其他地方，系統立即自動儲存")
+            st.caption("💡 修改欄位後點擊其他地方自動儲存 ／ 最下方空白列可直接輸入新增")
 
     # ── 重新整理按鈕 ──────────────────────────────────────
     st.divider()
