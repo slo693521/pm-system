@@ -320,16 +320,14 @@ with page_tab1:
         bg = STATUS_CONFIG.get(row.get("status_type",""),{}).get("bg","#FFFFFF")
         return [f"background-color:{bg}" for _ in row]
 
-    def highlight_week_cells(df_styled):
-        """逐格：含本週日期的格子 → 紅字加粗"""
-        styles = pd.DataFrame("", index=df_styled.data.index, columns=df_styled.data.columns)
-        for col in df_styled.data.columns:
+    def highlight_week_cells(df):
+        """逐格：含本週日期的格子 → 紅字加粗
+        axis=None 時 pandas 傳入的是 DataFrame，不是 Styler"""
+        styles = pd.DataFrame("", index=df.index, columns=df.columns)
+        for col in df.columns:
             if col not in DATE_COLS: continue
-            for idx in df_styled.data.index:
-                val = str(df_styled.data.at[idx, col])
-                # 抽出所有「M/D」或「YYYY-MM-DD」型日期片段
-                import re
-                # 匹配 1/1 ~ 12/31 或 YYYY-MM-DD
+            for idx in df.index:
+                val = str(df.at[idx, col])
                 dates_found = re.findall(r"\b(\d{1,2}/\d{1,2})\b|\b(\d{4}-\d{2}-\d{2})\b", val)
                 for grp in dates_found:
                     raw = grp[0] or grp[1]
