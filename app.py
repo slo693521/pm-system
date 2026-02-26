@@ -6,7 +6,7 @@ def check_password():
     def password_entered():
         """檢查輸入的密碼是否正確。"""
         # 這裡的 "my_secret_password" 請改成你想設定的密碼
-        if st.session_state["password"] == st.secrets["password"]:
+        if st.session_state["password"] == "123456":
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 為了安全，刪除輸入暫存
         else:
@@ -29,18 +29,6 @@ def check_password():
         st.error("😕 密碼錯誤，請再試一次。")
         
     return False
-
-# --- 主程式控制邏輯 ---
-
-
-    # ------------------------------------------------
-    # 這裡放你原本所有的 App 內容
-    # ------------------------------------------------
-   
-
-
-    # 如果密碼不正確，停止後續所有程式碼執行
-    st.stop()
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
