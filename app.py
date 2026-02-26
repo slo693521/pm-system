@@ -391,39 +391,64 @@ with page_tab1:
                      height=min(420, 38+len(df_sec)*35),
                      column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
 
-        # ── 自動儲存編輯區 ──────────────────────────────────
+        # ── 編輯 + 勾選刪除 ──────────────────────────────────
         with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
 
-            # 準備編輯用 DataFrame，加入中文狀態欄
+            # 準備編輯 DataFrame：加中文狀態欄 + 勾選刪除欄
             edit_df = df_sec[show_cols + ["status_type","id"]].copy()
             edit_df["status_zh"] = edit_df["status_type"].map(STATUS_KEY_TO_ZH).fillna("")
+            edit_df.insert(0, "🗑 刪除", False)   # 勾選欄放最前面
 
             original_df = edit_df.copy()
             edit_key    = f"edit_{sec}"
 
             def auto_save_callback(sec=sec, original_df=original_df):
-                new_df = st.session_state.get(f"edit_{sec}")
-                if new_df is None: return
-                saved = do_save(sec, original_df, new_df)
+                state = st.session_state.get(f"edit_{sec}")
+                if state is None: return
+                saved = do_save(sec, original_df, state)
                 if saved > 0:
                     st.cache_data.clear()
                     st.toast(f"✅ 自動儲存 {saved} 筆！", icon="💾")
 
-            st.data_editor(
+            edited = st.data_editor(
                 edit_df,
                 key=edit_key,
                 on_change=auto_save_callback,
-                column_config={k:v for k,v in COL_CONFIG.items()
-                               if k in edit_df.columns or k == "status_zh"},
+                column_config={
+                    **{k:v for k,v in COL_CONFIG.items()
+                       if k in edit_df.columns or k == "status_zh"},
+                    "🗑 刪除": st.column_config.CheckboxColumn(
+                        "🗑 刪除", help="勾選後按下方「刪除勾選列」", width="small"),
+                },
                 use_container_width=True,
                 num_rows="dynamic",
                 hide_index=True,
-                column_order=["status_zh","status","completion","materials","case_no",
-                              "project_name","client","tracking","drawing","pipe_support",
-                              "welding","nde","sandblast","assembly","painting",
-                              "pressure_test","handover","handover_year","contact"],
+                column_order=["🗑 刪除","status_zh","status","completion","materials",
+                              "case_no","project_name","client","tracking","drawing",
+                              "pipe_support","welding","nde","sandblast","assembly",
+                              "painting","pressure_test","handover","handover_year","contact"],
             )
-            st.caption("💡 修改欄位後點擊其他地方自動儲存 ／ 最下方空白列可直接輸入新增")
+
+            # 勾選刪除按鈕
+            del_rows = edited[edited["🗑 刪除"] == True]
+            if not del_rows.empty:
+                st.warning(f"⚠️ 已勾選 {len(del_rows)} 列，按下方按鈕確認刪除")
+                if st.button(f"🗑 確認刪除 {len(del_rows)} 列",
+                             key=f"del_btn_{sec}", type="primary"):
+                    deleted = 0
+                    for _, row in del_rows.iterrows():
+                        rid = str(row.get("id",""))
+                        if rid and rid not in ("","None"):
+                            try:
+                                supabase.table("projects").delete().eq("id", rid).execute()
+                                deleted += 1
+                            except Exception as e:
+                                st.toast(f"刪除失敗：{e}", icon="❌")
+                    st.success(f"✅ 已刪除 {deleted} 列")
+                    st.cache_data.clear()
+                    st.rerun()
+            else:
+                st.caption("💡 修改後點擊其他地方自動儲存 ／ 末列空白列可新增 ／ 勾選🗑可刪除")
 
     # ── 重新整理按鈕 ──────────────────────────────────────
     st.divider()
