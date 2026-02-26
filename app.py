@@ -141,7 +141,7 @@ STATUS_ZH_OPTIONS = [""] + [v["label"] for v in STATUS_CONFIG.values()]
 
 SECTIONS = ["主要工程", "偉鴻", "材料案"]
 PROCESS_COLS  = ["drawing","pipe_support","welding","nde","sandblast","assembly","painting","pressure_test","handover"]
-PROCESS_NAMES = ["製造圖面","管撐製作","研磨點焊","焊道NDE","噴砂","組立*","噴漆","試壓","交站"]
+PROCESS_NAMES = ["製造圖面","管撐製作","點焊","焊道NDE","噴砂","組立*","噴漆","試壓","交站"]
 DISPLAY_COLS  = ["status","completion","materials","case_no","project_name","client",
                  "tracking","drawing","pipe_support","welding","nde","sandblast",
                  "assembly","painting","pressure_test","handover","handover_year","contact"]
@@ -157,7 +157,7 @@ COL_CONFIG = {
     "tracking":      st.column_config.TextColumn("備註", width="medium"),
     "drawing":       st.column_config.TextColumn("製造圖面"),
     "pipe_support":  st.column_config.TextColumn("管撐製作"),
-    "welding":       st.column_config.TextColumn("研磨點焊"),
+    "welding":       st.column_config.TextColumn("點焊"),
     "nde":           st.column_config.TextColumn("焊道NDE"),
     "sandblast":     st.column_config.TextColumn("噴砂"),
     "assembly":      st.column_config.TextColumn("組立*"),
@@ -255,6 +255,47 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
             elif "停工" in s:  row_dict["status_type"] = "suspended"
             elif "交站" in s or row_dict.get("completion") == "100%": row_dict["status_type"] = "completed"
             else: row_dict["status_type"] = "not_started"
+
+        # ── 自動計算完成率 ────────────────────────────────────
+        # 規則：依最高已填工序自動設定，組立/噴漆試壓為手動區間不自動覆蓋
+        def filled(col): return bool(row_dict.get(col,"").strip())
+
+        # 手動區間：assembly(60-80%) / painting+pressure_test(90%) 若已在此範圍則保留
+        cur_pct_str = row_dict.get("completion","").replace("%","").strip()
+        try:
+            cur_pct = int(float(cur_pct_str))
+        except:
+            cur_pct = 0
+
+        auto_pct = None
+        # 由低到高掃，最後一個符合的 = 當前進度
+        if filled("drawing"):     auto_pct = 10
+        if filled("pipe_support"): auto_pct = 20
+        if filled("welding"):      auto_pct = 30
+        if filled("nde"):          auto_pct = 40
+        if filled("sandblast"):    auto_pct = 50
+        if filled("handover"):     auto_pct = 100   # 已交站
+
+        # 組立（60-80%）：若已填且當前 < 60，自動設 60；若已在 60-80 保留
+        if filled("assembly"):
+            if auto_pct is None or auto_pct < 60:
+                if cur_pct < 60:
+                    auto_pct = 60
+                else:
+                    auto_pct = None  # 保留手動值
+
+        # 噴漆/試壓（90%）：若已填且當前 < 90，自動設 90；若已 >= 90 保留
+        if filled("painting") or filled("pressure_test"):
+            if auto_pct is None or auto_pct < 90:
+                if cur_pct < 90:
+                    auto_pct = 90
+                else:
+                    auto_pct = None  # 保留手動值
+
+        # 只在 auto_pct 確實更高時才覆蓋（不往回退）
+        if auto_pct is not None and auto_pct > cur_pct:
+            row_dict["completion"] = f"{auto_pct}%"
+
         return row_dict
 
     # 1. 修改的列
