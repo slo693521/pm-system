@@ -3,11 +3,6 @@ import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
 
-try:
-    import anthropic
-    AI_AVAILABLE = True
-except ImportError:
-    AI_AVAILABLE = False
 
 st.set_page_config(
     page_title="工程案執行進度管理系統",
@@ -69,13 +64,6 @@ def refresh():
     st.cache_data.clear()
     st.rerun()
 
-def get_ai_client():
-    if not AI_AVAILABLE:
-        return None
-    try:
-        return anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-    except Exception:
-        return None
 
 # ── 設定 ──────────────────────────────────────────────────
 STATUS_CONFIG = {
@@ -294,106 +282,6 @@ with b1:
 with b2:
     if st.button("🔄 重新整理", use_container_width=True):
         refresh()
-
-# ══════════════════════════════════════════════════════════
-# ── AI 助理 ───────────────────────────────────────────────
-# ══════════════════════════════════════════════════════════
-st.divider()
-st.markdown("### 🤖 AI 助理")
-
-# 檢查 AI 是否可用
-ai_client = get_ai_client()
-if not ai_client:
-    st.warning("""
-⚠️ AI 功能尚未啟用。請在 Streamlit Cloud → Settings → Secrets 加入：
-
-```
-ANTHROPIC_API_KEY = "sk-ant-你的金鑰"
-```
-
-去 [console.anthropic.com](https://console.anthropic.com) 取得 API Key。
-""")
-else:
-    def build_context(df):
-        lines = [f"今天日期：{today}，共 {len(df)} 筆工程資料。\n"]
-        for _,r in df.iterrows():
-            label = STATUS_CONFIG.get(r.get("status_type",""),{}).get("label","")
-            lines.append(
-                f"- [{r['section']}] {r['project_name']} / 業主:{r['client']} / "
-                f"狀態:{label}({r['status']}) / 完成率:{r['completion']} / "
-                f"交站:{r['handover']} 年份:{r['handover_year']} / 備註:{r['tracking']}"
-            )
-        return "\n".join(lines)
-
-    ai_tab1, ai_tab2, ai_tab3 = st.tabs(["📊 進度摘要報告","⚠️ 風險預警","💬 自然語言查詢"])
-
-    with ai_tab1:
-        st.markdown("AI 自動分析所有工程狀況，產生摘要報告。")
-        if st.button("🚀 產生摘要報告", type="primary"):
-            with st.spinner("AI 分析中，請稍候..."):
-                try:
-                    msg = ai_client.messages.create(
-                        model="claude-sonnet-4-6", max_tokens=1200,
-                        messages=[{"role":"user","content":
-                            f"""你是工程進度管理助理，請根據以下資料用繁體中文產生摘要報告：
-1. 整體進度概況（各狀態數量）
-2. 目前製作中的重點工程（列出前5項）
-3. 待交站清單
-4. 需要特別注意的事項
-5. 簡短建議
-
-{build_context(df_all)}"""}])
-                    st.markdown(f'<div class="ai-box">{msg.content[0].text}</div>',
-                                unsafe_allow_html=True)
-                except Exception as e:
-                    st.error(f"AI 錯誤：{e}")
-
-    with ai_tab2:
-        st.markdown("AI 分析可能有風險的工程，標示輕重等級。")
-        if st.button("🔍 分析風險", type="primary"):
-            with st.spinner("AI 分析中，請稍候..."):
-                try:
-                    df_active = df_all[df_all["status_type"].isin(
-                        ["in_progress","pending","suspended"])]
-                    msg = ai_client.messages.create(
-                        model="claude-sonnet-4-6", max_tokens=1000,
-                        messages=[{"role":"user","content":
-                            f"""分析以下進行中工程的風險，用繁體中文回答。
-注意：停工中、完成率偏低、備註有異常的工程。
-用 🔴高風險 / 🟡中風險 / 🟢低風險 標示，說明原因和建議處理方式。
-
-{build_context(df_active)}"""}])
-                    st.markdown(f'<div class="ai-box">{msg.content[0].text}</div>',
-                                unsafe_allow_html=True)
-                except Exception as e:
-                    st.error(f"AI 錯誤：{e}")
-
-    with ai_tab3:
-        st.markdown("直接用中文提問，AI 從資料中找答案。")
-        examples = ["目前製作中的工程有哪些？","欣雄的工程進度如何？",
-                    "完成率低於80%的工程？","預計3月交站的工程？"]
-        ec = st.columns(4)
-        for i,ex in enumerate(examples):
-            if ec[i].button(ex, key=f"ex{i}", use_container_width=True):
-                st.session_state.ai_q = ex
-
-        question = st.text_input("輸入問題：",
-                                 value=st.session_state.get("ai_q",""),
-                                 placeholder="例：目前待交站有幾個工程？業主是誰？")
-        if st.button("📨 送出", type="primary") and question:
-            with st.spinner("AI 回答中..."):
-                try:
-                    msg = ai_client.messages.create(
-                        model="claude-sonnet-4-6", max_tokens=800,
-                        messages=[{"role":"user","content":
-                            f"""根據以下工程資料用繁體中文回答問題，要具體列出相關工程名稱和細節。
-{build_context(df_all)}
-問題：{question}"""}])
-                    st.markdown(f'<div class="ai-box">{msg.content[0].text}</div>',
-                                unsafe_allow_html=True)
-                    st.session_state.ai_q = ""
-                except Exception as e:
-                    st.error(f"AI 錯誤：{e}")
 
 # ── 匯出 PDF ──────────────────────────────────────────────
 with st.expander("📄 匯出 PDF"):
