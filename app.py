@@ -522,15 +522,56 @@ with page_tab1:
                              horizontal=True, key=f"view_{sec}", label_visibility="collapsed")
 
         if view_mode == "📋 表格":
-            styled = (styled_df.style
-                      .apply(color_rows, axis=1)
-                      .apply(highlight_col, axis=0)
-                      .format(na_rep=""))
-            _fixed_cols = [c for c in DISPLAY_COLS if c in show_df.columns]
-            st.dataframe(styled, use_container_width=True, hide_index=True,
-                         height=min(420, 38+len(df_sec)*35),
-                         column_order=_fixed_cols,
-                         column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
+            # ── HTML 表格：完全鎖死排序，顏色/紅字完整保留 ──
+            import re as _re2
+            COL_DISPLAY_NAMES = {
+                "status":"施工順序","completion":"完成率","materials":"備料",
+                "case_no":"案號","project_name":"工程名稱","client":"業主",
+                "tracking":"備註","drawing":"製造圖面","pipe_support":"管撐製作",
+                "welding":"點焊","nde":"焊道NDE","sandblast":"噴砂",
+                "assembly":"組立*","painting":"噴漆","pressure_test":"試壓",
+                "handover":"交站","handover_year":"年份","contact":"對應窗口",
+            }
+            disp_cols = [c for c in DISPLAY_COLS if c in df_sec.columns]
+
+            # 表頭
+            th_html = "".join(
+                f'<th style="background:#1a3a5c;color:#fff;padding:6px 8px;'
+                f'white-space:nowrap;font-size:12px;border:1px solid #2a5080;">'
+                f'{COL_DISPLAY_NAMES.get(c,c)}</th>'
+                for c in disp_cols
+            )
+            # 表身
+            rows_html = ""
+            for _, row in df_sec.iterrows():
+                st_key = str(row.get("status_type",""))
+                bg = STATUS_CONFIG.get(st_key,{}).get("bg","#ffffff")
+                upd = str(row.get("updated_at",""))
+                cells = ""
+                for c in disp_cols:
+                    val = str(row.get(c,""))
+                    # 偵測本週日期 → 紅字
+                    date_hits = _re2.findall(
+                        r"(?<!\d)(\d{1,2}/\d{1,2})(?!\d)|(\d{4}-\d{2}-\d{2})", val)
+                    cell_style = f"background:{bg};padding:5px 7px;font-size:12px;border:1px solid #ddd;white-space:nowrap;color:#111;"
+                    cell_val = val
+                    for grp in date_hits:
+                        raw = grp[0] or grp[1]
+                        if is_this_week_str(raw):
+                            cell_val = val.replace(
+                                raw,
+                                f'<span style="color:#c62828;font-weight:900">{raw}</span>')
+                            break
+                    cells += f'<td style="{cell_style}">{cell_val}</td>'
+                rows_html += f"<tr>{cells}</tr>"
+
+            table_html = f"""
+            <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+            <table style="border-collapse:collapse;width:100%;font-family:sans-serif;">
+              <thead><tr>{th_html}</tr></thead>
+              <tbody>{rows_html}</tbody>
+            </table></div>"""
+            st.markdown(table_html, unsafe_allow_html=True)
         else:
             # ── 手機卡片視圖 ──
             import re as _re
