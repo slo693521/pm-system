@@ -134,7 +134,7 @@ STATUS_CONFIG = {
     "pending":     {"label":"待交站","icon":"📦","bg":"#CCE8FF","btn":"#2196f3","text":"#fff"},
     "not_started": {"label":"未開始","icon":"⏳","bg":"#FFFFFF","btn":"#90a4ae","text":"#fff"},
     "suspended":   {"label":"停工",  "icon":"⏸","bg":"#FFE0B2","btn":"#ff7043","text":"#fff"},
-    "completed":   {"label":"已完成","icon":"✅","bg":"#F0F0F0","btn":"#757575","text":"#fff"},
+    "completed":   {"label":"已交站","icon":"✅","bg":"#F0F0F0","btn":"#757575","text":"#fff"},
 }
 # 中文標籤 ↔ 英文 key 對照
 STATUS_ZH_TO_KEY = {v["label"]: k for k, v in STATUS_CONFIG.items()}
@@ -255,7 +255,7 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
             if "製作中" in s and "停工" not in s: row_dict["status_type"] = "in_progress"
             elif "待交站" in s: row_dict["status_type"] = "pending"
             elif "停工" in s:  row_dict["status_type"] = "suspended"
-            elif "交站" in s or row_dict.get("completion") == "100%": row_dict["status_type"] = "completed"
+            elif "已交站" in s or "交站" in s or row_dict.get("completion") == "100%": row_dict["status_type"] = "completed"
             else: row_dict["status_type"] = "not_started"
 
         # ── 自動計算完成率 ────────────────────────────────────
@@ -283,18 +283,23 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
             else:
                 auto_pct = 60        # 至少跳到 60%
 
-        # 噴漆/試壓（90%）：填了就至少 90%，若手動 >= 90 則保留
+        # 噴漆/試壓（85-90%）：填了就至少 85%，手動在 85-90 之間保留
         if filled("painting") or filled("pressure_test"):
             cur_pct_str = row_dict.get("completion","").replace("%","").strip()
             try:   cur_pct = int(float(cur_pct_str))
             except: cur_pct = 0
-            if cur_pct >= 90:
-                auto_pct = cur_pct   # 保留手動值（如 95%）
+            if 85 <= cur_pct <= 90:
+                auto_pct = cur_pct   # 保留手動值
             else:
-                auto_pct = 90
+                auto_pct = 85
 
-        # 交站 → 100%
-        if filled("handover"):
+        # 狀態為「待交站」→ 至少 95%
+        if row_dict.get("status_type") == "pending":
+            if auto_pct < 95:
+                auto_pct = 95
+
+        # 狀態為「已交站」→ 100%
+        if row_dict.get("status_type") == "completed":
             auto_pct = 100
 
         # 直接覆蓋（刪除日期時也會往下調整）
