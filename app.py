@@ -1,52 +1,51 @@
 import streamlit as st
+import pandas as pd
+from supabase import create_client, Client
+from datetime import datetime
 
+# --- 1. 密碼檢查功能定義 ---
 def check_password():
     """如果密碼正確則返回 True，否則顯示密碼輸入框。"""
-
     def password_entered():
         """檢查輸入的密碼是否正確。"""
-        # 這裡的 "my_secret_password" 請改成你想設定的密碼
-        if st.session_state["password"] == "123456":
+        # 這裡會讀取您在 Streamlit Cloud 後台 Secrets 設定的 password
+        if st.session_state["password"] == st.secrets["password"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # 為了安全，刪除輸入暫存
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
-    # 如果已經驗證過，直接返回 True
     if st.session_state.get("password_correct", False):
         return True
 
-    # 顯示密碼輸入介面
-    st.title("🔒 存取受限")
+    st.title("🔒 系統存取受限")
     st.text_input(
-        "本 App 僅供授權人員使用，請輸入訪問密碼：", 
+        "本系統僅供授權人員使用，請輸入訪問密碼：", 
         type="password", 
         on_change=password_entered, 
         key="password"
     )
 
-    if "password_correct" in st.session_state:
-        st.error("😕 密碼錯誤，請再試一次。")
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+        st.error("😕 密碼錯誤，請重新輸入。")
         
     return False
 
-# --- 主程式控制邏輯 ---
+# --- 2. 主程式控制邏輯 (核心攔截) ---
 
-if check_password():
-    # ------------------------------------------------
-    # 這裡放你原本所有的 App 內容
-    # ------------------------------------------------
-    st.success("✅ 認證成功！歡迎進入系統")
-    st.title("🚀 我的私密數據後台")
-    
-    st.write("現在路人看不到這裡的內容了。")
-    
-    # 範例：顯示機密資料
-    st.dataframe({"機密項目": ["薪資", "密碼", "客戶清單"], "內容": [100, "abc", "Secret"]})
-
-else:
-    # 如果密碼不正確，停止後續所有程式碼執行
+# 執行檢查：如果沒過，程式會在這裡直接停住 (st.stop)，路人絕對看不到後面內容
+if not check_password():
     st.stop()
+
+# --- 3. 通過後才執行：這裡開始接您原本所有的 App 內容 ---
+# (以下已經移除所有範例圖片內容，直接進入您的管理系統)
+
+st.set_page_config(
+    page_title="工程案執行進度管理系統",
+    page_icon="⚙",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
