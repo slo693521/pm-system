@@ -120,6 +120,8 @@ def load_data() -> pd.DataFrame:
     df = pd.DataFrame(res.data)
     for col in df.columns:
         df[col] = df[col].fillna("").astype(str).replace({"None":"","nan":"","NaN":"","none":""})
+    # 固定顯示順序欄（新增的排最上面 = 序號最小）
+    df.insert(0, "_order", range(1, len(df)+1))
     return df
 
 def refresh():
@@ -222,7 +224,7 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
     now_iso = datetime.now().isoformat()
 
     # 不送進 Supabase 的前端欄位（id 單獨處理，不放這裡）
-    NON_DB_COLS = {"🗑 刪除", "status_zh"}
+    NON_DB_COLS = {"🗑 刪除", "status_zh", "_order"}
 
     def clean_val(v) -> str:
         """任何值轉乾淨字串，None/nan → 空字串"""
@@ -501,7 +503,7 @@ with page_tab1:
             st.caption("此分區目前沒有資料"); continue
 
         # ── 唯讀顯示（有顏色）──────────────────────────────
-        show_cols = [c for c in DISPLAY_COLS if c in df_sec.columns]
+        show_cols = [c for c in DISPLAY_COLS if c in df_sec.columns and c != "_order"]
         show_df   = df_sec[show_cols].copy()
 
         # 加入 updated_at / status_type 讓 color_rows 能讀到
@@ -519,8 +521,10 @@ with page_tab1:
                       .apply(color_rows, axis=1)
                       .apply(highlight_col, axis=0)
                       .format(na_rep=""))
+            _fixed_cols = [c for c in DISPLAY_COLS if c in show_df.columns]
             st.dataframe(styled, use_container_width=True, hide_index=True,
                          height=min(420, 38+len(df_sec)*35),
+                         column_order=_fixed_cols,
                          column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
         else:
             # ── 手機卡片視圖 ──
@@ -582,7 +586,7 @@ with page_tab1:
         with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
 
             # 準備編輯 DataFrame：清除 None 字串 + 加中文狀態欄 + 勾選刪除欄
-            edit_df = df_sec[show_cols + ["status_type","id"]].copy()
+            edit_df = df_sec[[c for c in show_cols + ["status_type","id"] if c != "_order"]].copy()
             for _c in edit_df.columns:  # 再次清除殘留 None 字串
                 edit_df[_c] = edit_df[_c].replace({"None":"","nan":"","NaN":""})
             edit_df["status_zh"] = edit_df["status_type"].map(STATUS_KEY_TO_ZH).fillna("")
