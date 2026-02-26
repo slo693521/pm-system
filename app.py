@@ -113,6 +113,26 @@ def get_supabase() -> Client:
 
 supabase = get_supabase()
 
+# ── UI 狀態持久化（存到 Supabase user_prefs）──────────
+import json as _json
+
+def load_ui_state() -> dict:
+    """從 Supabase 讀取上次 UI 狀態"""
+    try:
+        res = supabase.table("user_prefs").select("value").eq("key","ui_state").execute()
+        if res.data:
+            return _json.loads(res.data[0]["value"])
+    except: pass
+    return {}
+
+def save_ui_state(state: dict):
+    """把目前 UI 狀態存回 Supabase"""
+    try:
+        supabase.table("user_prefs").upsert(
+            {"key": "ui_state", "value": _json.dumps(state, ensure_ascii=False)}
+        ).execute()
+    except: pass
+
 @st.cache_data(ttl=15)
 def load_data() -> pd.DataFrame:
     res = supabase.table("projects").select("*").order("case_no", desc=True).execute()
@@ -386,6 +406,14 @@ page_tab1, page_tab2, page_tab3 = st.tabs(["📋 進度管理", "📊 工時分�
 # ═══════════════════════════════════════════════════════
 with page_tab1:
 
+    # 第一次載入：從 Supabase 還原上次的篩選狀態
+    if "ui_loaded" not in st.session_state:
+        _saved = load_ui_state()
+        st.session_state.active_status  = set(_saved.get("active_status", []))
+        st.session_state.filter_year    = _saved.get("filter_year", "全部年份")
+        st.session_state.filter_section = _saved.get("filter_section", "全部分區")
+        st.session_state.ui_loaded      = True
+
     if "active_status" not in st.session_state:
         st.session_state.active_status = set()
 
@@ -401,6 +429,7 @@ with page_tab1:
                      use_container_width=True,
                      type="primary" if is_all else "secondary"):
             st.session_state.active_status = set()
+            save_ui_state({"active_status": [], "filter_year": st.session_state.get("filter_year","全部年份"), "filter_section": st.session_state.get("filter_section","全部分區")})
             st.rerun()
     for i,(key,cfg) in enumerate(STATUS_CONFIG.items()):
         active = key in st.session_state.active_status
@@ -411,12 +440,27 @@ with page_tab1:
                          type="primary" if active else "secondary"):
                 if active: st.session_state.active_status.discard(key)
                 else:      st.session_state.active_status.add(key)
+                save_ui_state({"active_status": list(st.session_state.active_status), "filter_year": st.session_state.get("filter_year","全部年份"), "filter_section": st.session_state.get("filter_section","全部分區")})
                 st.rerun()
 
     search = st.text_input("🔍 搜尋", placeholder="案號 / 工程名稱 / 業主 / 窗口", label_visibility="collapsed")
     ff1, ff2 = st.columns(2)
-    with ff1: filter_year    = st.selectbox("年份", ["全部年份","115","114","未填年份"], label_visibility="collapsed")
-    with ff2: filter_section = st.selectbox("分區", ["全部分區"]+SECTIONS, label_visibility="collapsed")
+    with ff1:
+        filter_year = st.selectbox("年份", ["全部年份","116","115","114","未填年份"],
+                                   index=["全部年份","116","115","114","未填年份"].index(
+                                       st.session_state.get("filter_year","全部年份")),
+                                   label_visibility="collapsed", key="filter_year")
+    with ff2:
+        filter_section = st.selectbox("分區", ["全部分區"]+SECTIONS,
+                                      index=(["全部分區"]+SECTIONS).index(
+                                          st.session_state.get("filter_section","全部分區")),
+                                      label_visibility="collapsed", key="filter_section")
+    # 年份/分區變動時存到雲端
+    _cur_ui = {"active_status": list(st.session_state.active_status),
+               "filter_year": filter_year, "filter_section": filter_section}
+    if st.session_state.get("_last_ui") != _cur_ui:
+        save_ui_state(_cur_ui)
+        st.session_state["_last_ui"] = _cur_ui
 
     st.markdown("""
     <div class="legend-bar">
