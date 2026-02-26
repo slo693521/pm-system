@@ -309,8 +309,7 @@ with page_tab1:
 
     st.caption(f"顯示 **{len(df)}** / {len(df_all)} 筆")
 
-    # 列底色 = 狀態顏色；日期欄若為本週 → 紅字加粗（逐格）
-    # 哪些欄位「可能含日期」（會被本週偵測）
+    # 日期欄若含本週日期 → 紅字加粗（逐欄 applymap）
     DATE_COLS = {"drawing","pipe_support","welding","nde","sandblast",
                  "assembly","painting","pressure_test","handover","tracking",
                  "materials","contact","status","completion"}
@@ -320,22 +319,26 @@ with page_tab1:
         bg = STATUS_CONFIG.get(row.get("status_type",""),{}).get("bg","#FFFFFF")
         return [f"background-color:{bg}" for _ in row]
 
-    def highlight_week_cells(df):
-        """逐格：含本週日期的格子 → 紅字加粗
-        axis=None 時 pandas 傳入的是 DataFrame，不是 Styler"""
+    def cell_has_week_date(val: str) -> bool:
+        """格子內容是否含本週日期（支援 2/1、2/26、2026-02-26 等格式）"""
         import re as _re
-        styles = pd.DataFrame("", index=df.index, columns=df.columns)
-        for col in df.columns:
-            if col not in DATE_COLS: continue
-            for idx in df.index:
-                val = str(df.at[idx, col])
-                dates_found = _re.findall(r"\b(\d{1,2}/\d{1,2})\b|\b(\d{4}-\d{2}-\d{2})\b", val)
-                for grp in dates_found:
-                    raw = grp[0] or grp[1]
-                    if is_this_week_str(raw):
-                        styles.at[idx, col] = "color:#c62828;font-weight:900"
-                        break
-        return styles
+        val = str(val)
+        # 找出所有 M/D 或 YYYY-MM-DD 片段
+        hits = _re.findall(r"(?<![\d])(\d{1,2}/\d{1,2})(?![\d])", val)
+        hits += _re.findall(r"(\d{4}-\d{2}-\d{2})", val)
+        for raw in hits:
+            if is_this_week_str(raw):
+                return True
+        return False
+
+    def highlight_col(col):
+        """逐欄呼叫：是日期欄才檢查，其他欄直接回傳空字串"""
+        if col.name not in DATE_COLS:
+            return [""] * len(col)
+        return [
+            "color:#c62828;font-weight:900" if cell_has_week_date(v) else ""
+            for v in col
+        ]
 
     sections_to_show = SECTIONS if filter_section=="全部分區" else [filter_section]
 
@@ -376,25 +379,65 @@ with page_tab1:
                 styled_df[extra] = df_sec[extra].values
 
         styled = (styled_df.style
-                  .apply(color_rows, axis=1)          # 整列底色 = 狀態色
-                  .apply(highlight_week_cells, axis=None)  # 本週日期格 = 紅字
+                  .apply(color_rows, axis=1)   # 整列底色 = 狀態色
+                  .apply(highlight_col, axis=0)  # 本週日期格 = 紅字加粗
                   .format(na_rep=""))
         st.dataframe(styled, use_container_width=True, hide_index=True,
                      height=min(420, 38+len(df_sec)*35),
                      column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
+
+        # ── ➕ 新增工程案（放在最上方）────────────────────────
+        with st.expander(f"➕ 新增工程案到【{sec}】"):
+            with st.form(key=f"add_{sec}"):
+                na1, na2, na3 = st.columns(3)
+                with na1:
+                    n_case_no      = st.text_input("案號")
+                    n_project_name = st.text_input("工程名稱")
+                    n_client       = st.text_input("業主")
+                with na2:
+                    n_status    = st.text_input("施工順序")
+                    n_completion= st.text_input("完成率", placeholder="例：50%")
+                    n_status_zh = st.selectbox("狀態", STATUS_ZH_OPTIONS)
+                with na3:
+                    n_handover      = st.text_input("交站日期")
+                    n_handover_year = st.selectbox("年份", ["","114","115","116"])
+                    n_contact       = st.text_input("對應窗口")
+                n_tracking = st.text_input("備註")
+                n_materials= st.text_input("備料")
+                if st.form_submit_button("✅ 新增（新增至最上方）", type="primary"):
+                    new_row = {
+                        "section":       sec,
+                        "case_no":       n_case_no,
+                        "project_name":  n_project_name,
+                        "client":        n_client,
+                        "status":        n_status,
+                        "completion":    n_completion,
+                        "status_type":   STATUS_ZH_TO_KEY.get(n_status_zh, "not_started"),
+                        "handover":      n_handover,
+                        "handover_year": n_handover_year,
+                        "contact":       n_contact,
+                        "tracking":      n_tracking,
+                        "materials":     n_materials,
+                        "updated_at":    datetime.now().isoformat(),
+                    }
+                    try:
+                        supabase.table("projects").insert(new_row).execute()
+                        st.success(f"✅ 已新增「{n_project_name}」！")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"新增失敗：{e}")
 
         # ── 自動儲存編輯區 ──────────────────────────────────
         with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
 
             # 準備編輯用 DataFrame，加入中文狀態欄
             edit_df = df_sec[show_cols + ["status_type","id"]].copy()
-            # ✅ 新增 status_zh 欄（中文下拉）
             edit_df["status_zh"] = edit_df["status_type"].map(STATUS_KEY_TO_ZH).fillna("")
 
             original_df = edit_df.copy()
             edit_key    = f"edit_{sec}"
 
-            # ✅ on_change：改完立即自動儲存
             def auto_save_callback(sec=sec, original_df=original_df):
                 new_df = st.session_state.get(f"edit_{sec}")
                 if new_df is None: return
@@ -410,14 +453,14 @@ with page_tab1:
                 column_config={k:v for k,v in COL_CONFIG.items()
                                if k in edit_df.columns or k == "status_zh"},
                 use_container_width=True,
-                num_rows="dynamic",
+                num_rows="fixed",
                 hide_index=True,
                 column_order=["status_zh","status","completion","materials","case_no",
                               "project_name","client","tracking","drawing","pipe_support",
                               "welding","nde","sandblast","assembly","painting",
                               "pressure_test","handover","handover_year","contact"],
             )
-            st.caption("💡 修改任意欄位後點擊其他地方，系統立即自動儲存，無需按按鈕")
+            st.caption("💡 修改欄位後點擊其他地方，系統立即自動儲存")
 
     # ── 重新整理按鈕 ──────────────────────────────────────
     st.divider()
