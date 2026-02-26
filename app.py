@@ -763,72 +763,130 @@ with page_tab1:
 # PAGE 2：工時分析
 # ═══════════════════════════════════════════════════════
 with page_tab2:
-    if df_all.empty: st.warning("尚無資料")
+    if df_all.empty:
+        st.warning("尚無資料")
     else:
-        st.markdown("### 📊 工時分析")
-        a1,a2 = st.columns(2)
+        st.markdown("### 📊 各工程站點天數分析")
+        st.caption("從**管撐製作**開始，計算每個站點完成所需天數（依欄位日期推算）")
+
+        a1, a2, a3 = st.columns(3)
         with a1: sec_filter  = st.selectbox("分區", ["全部"]+SECTIONS, key="ana_sec")
-        with a2: year_filter = st.selectbox("年份", ["全部","115","114"], key="ana_year")
+        with a2: year_filter = st.selectbox("年份", ["全部","116","115","114"], key="ana_year")
+        with a3: sta_filter  = st.selectbox("狀態", ["全部"]+[v["label"] for v in STATUS_CONFIG.values()], key="ana_sta")
+
         df_ana = df_all.copy()
         if sec_filter  != "全部": df_ana = df_ana[df_ana["section"]==sec_filter]
         if year_filter != "全部": df_ana = df_ana[df_ana["handover_year"]==year_filter]
-        if df_ana.empty: st.info("此條件下沒有資料")
+        if sta_filter  != "全部":
+            key = STATUS_ZH_TO_KEY.get(sta_filter,"")
+            if key: df_ana = df_ana[df_ana["status_type"]==key]
+
+        if df_ana.empty:
+            st.info("此條件下沒有資料")
         else:
-            st.caption(f"分析範圍：{len(df_ana)} 筆"); st.divider()
-            c1,c2 = st.columns(2)
-            with c1:
-                st.markdown("#### 🔵 各狀態分佈")
-                sc = df_ana["status_type"].value_counts().reset_index()
-                sc.columns = ["status_type","數量"]
-                sc["狀態"] = sc["status_type"].map(STATUS_KEY_TO_ZH)
-                st.bar_chart(sc.set_index("狀態")["數量"], color="#2196f3", use_container_width=True)
-            with c2:
-                st.markdown("#### 📈 完成率分佈")
-                def parse_pct(s):
-                    try: return float(str(s).replace("%","").strip())
-                    except: return None
-                df_ana["_pct"] = df_ana["completion"].apply(parse_pct)
-                df_pct = df_ana[df_ana["_pct"].notna()].copy()
-                if not df_pct.empty:
-                    df_pct["區間"] = pd.cut(df_pct["_pct"],[0,25,50,75,100],labels=["0-25%","26-50%","51-75%","76-100%"],include_lowest=True)
-                    dist = df_pct["區間"].value_counts().sort_index().reset_index(); dist.columns=["區間","數量"]
-                    st.bar_chart(dist.set_index("區間")["數量"], color="#4caf50", use_container_width=True)
-                else: st.info("無完成率資料")
-            st.divider(); st.markdown("#### 🔧 各工序完成數量")
-            pd_dict = {}
-            for col,name in zip(PROCESS_COLS,PROCESS_NAMES):
-                if col in df_ana.columns:
-                    pd_dict[name] = int(df_ana[col].apply(lambda x: 1 if str(x).strip() not in ["","None","nan","-"] else 0).sum())
-            df_proc = pd.DataFrame(list(pd_dict.items()),columns=["工序","完成數量"])
-            df_proc["未完成"] = len(df_ana)-df_proc["完成數量"]
-            st.bar_chart(df_proc.set_index("工序")[["完成數量","未完成"]], use_container_width=True)
-            st.divider()
-            c3,c4 = st.columns(2)
-            with c3:
-                st.markdown("#### 🏢 各業主工程數量")
-                cc = df_ana[df_ana["client"]!=""]["client"].value_counts().head(10)
-                if not cc.empty: st.bar_chart(cc, color="#ff7043", use_container_width=True)
-                else: st.info("無業主資料")
-            with c4:
-                st.markdown("#### 📦 各分區平均完成率")
-                df_ana["_pct2"] = df_ana["completion"].apply(parse_pct)
-                sec_avg = df_ana.groupby("section")["_pct2"].mean().dropna().round(1)
-                if not sec_avg.empty:
-                    da = sec_avg.reset_index(); da.columns=["分區","平均完成率(%)"]
-                    st.bar_chart(da.set_index("分區")["平均完成率(%)"], color="#9c27b0", use_container_width=True)
-                else: st.info("無完成率資料")
-            st.divider(); st.markdown("#### ⚙ 製作中工程 — 完成率排行")
-            df_ip = df_ana[df_ana["status_type"]=="in_progress"].copy()
-            df_ip["_p"] = df_ip["completion"].apply(parse_pct)
-            df_ip = df_ip[df_ip["_p"].notna()].sort_values("_p",ascending=False)
-            if df_ip.empty: st.info("目前沒有製作中的工程")
+            # ── 工序定義（從管撐製作開始）──
+            STAGES = [
+                ("pipe_support", "管撐製作"),
+                ("welding",      "點焊"),
+                ("nde",          "焊道NDE"),
+                ("sandblast",    "噴砂"),
+                ("assembly",     "組立"),
+                ("painting",     "噴漆"),
+                ("pressure_test","試壓"),
+                ("handover",     "交站"),
+            ]
+
+            def parse_date(val: str):
+                """解析 M/D 或 YYYY-MM-DD，補上當年年份"""
+                import re as _r
+                val = str(val).strip()
+                if not val or val in ("None","nan","-",""): return None
+                # 取第一個日期片段（欄位可能有備注文字）
+                m = _r.search(r"(\d{1,2})/(\d{1,2})", val)
+                if m:
+                    year = datetime.now().year
+                    try: return datetime(year, int(m.group(1)), int(m.group(2)))
+                    except: pass
+                try: return pd.to_datetime(val, errors="coerce").to_pydatetime()
+                except: return None
+
+            # ── 計算每筆工程的各站點天數 ──
+            records = []
+            for _, row in df_ana.iterrows():
+                dates = [(name, parse_date(row.get(col,""))) for col, name in STAGES]
+                dates_valid = [(n, d) for n, d in dates if d is not None]
+                if len(dates_valid) < 2: continue  # 少於兩個日期無法計算
+
+                proj = {
+                    "案號":     row.get("case_no",""),
+                    "工程名稱": row.get("project_name",""),
+                    "業主":     row.get("client",""),
+                    "分區":     row.get("section",""),
+                    "狀態":     STATUS_KEY_TO_ZH.get(row.get("status_type",""),""),
+                }
+                # 相鄰站點間隔天數
+                for i in range(len(dates_valid)-1):
+                    n1, d1 = dates_valid[i]
+                    n2, d2 = dates_valid[i+1]
+                    days = (d2 - d1).days
+                    if days >= 0:
+                        proj[f"{n1}→{n2}"] = days
+
+                # 管撐製作到最後一個有日期的站點（總天數）
+                first_d = dates_valid[0][1]
+                last_d  = dates_valid[-1][1]
+                proj["總天數"] = (last_d - first_d).days
+
+                records.append(proj)
+
+            if not records:
+                st.info("目前資料不足以計算天數（需要至少填寫 2 個以上的工序日期）")
             else:
-                st.dataframe(df_ip[["project_name","client","section","completion","tracking"]].rename(columns={"project_name":"工程名稱","client":"業主","section":"分區","completion":"完成率","tracking":"備註"}),use_container_width=True,hide_index=True)
-            st.divider(); st.markdown("#### 📦 待交站工程清單")
-            df_pe = df_ana[df_ana["status_type"]=="pending"].copy()
-            if df_pe.empty: st.info("目前沒有待交站的工程")
-            else:
-                st.dataframe(df_pe[["project_name","client","section","handover","handover_year","contact"]].rename(columns={"project_name":"工程名稱","client":"業主","section":"分區","handover":"交站","handover_year":"年份","contact":"對應窗口"}),use_container_width=True,hide_index=True)
+                df_days = pd.DataFrame(records).fillna("")
+
+                # ── 1. 各工程天數明細表 ──
+                st.markdown("#### 📋 各工程站點天數明細")
+                st.dataframe(df_days, use_container_width=True, hide_index=True,
+                             height=min(500, 40+len(df_days)*35))
+
+                st.divider()
+
+                # ── 2. 各站點平均天數（只取數字欄）──
+                st.markdown("#### 📊 各站點平均天數（所有工程）")
+                day_cols = [c for c in df_days.columns if "→" in c or c == "總天數"]
+                numeric_days = df_days[day_cols].apply(pd.to_numeric, errors="coerce")
+                avg_days = numeric_days.mean().dropna().round(1)
+
+                if not avg_days.empty:
+                    avg_df = avg_days.reset_index()
+                    avg_df.columns = ["站點區間", "平均天數"]
+                    st.bar_chart(avg_df.set_index("站點區間")["平均天數"],
+                                 color="#1a3a5c", use_container_width=True)
+
+                    # 數字卡片
+                    cols_m = st.columns(min(len(avg_df), 4))
+                    for i, (_, r) in enumerate(avg_df.iterrows()):
+                        cols_m[i % len(cols_m)].metric(r["站點區間"], f"{r['平均天數']} 天")
+                else:
+                    st.info("無法計算平均天數")
+
+                st.divider()
+
+                # ── 3. 最快 / 最慢工程（依總天數）──
+                numeric_total = pd.to_numeric(df_days["總天數"], errors="coerce")
+                df_days["_total"] = numeric_total
+                df_valid = df_days[df_days["_total"].notna()].sort_values("_total")
+
+                if len(df_valid) >= 2:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("#### 🚀 完成最快（總天數最少）")
+                        top3 = df_valid.head(3)[["案號","工程名稱","總天數","狀態"]]
+                        st.dataframe(top3, use_container_width=True, hide_index=True)
+                    with c2:
+                        st.markdown("#### 🐢 耗時最長（總天數最多）")
+                        bot3 = df_valid.tail(3)[["案號","工程名稱","總天數","狀態"]].sort_values("總天數", ascending=False)
+                        st.dataframe(bot3, use_container_width=True, hide_index=True)
 
 # ═══════════════════════════════════════════════════════
 # PAGE 3：生產工時儀表板
