@@ -323,12 +323,13 @@ with page_tab1:
     def highlight_week_cells(df):
         """逐格：含本週日期的格子 → 紅字加粗
         axis=None 時 pandas 傳入的是 DataFrame，不是 Styler"""
+        import re as _re
         styles = pd.DataFrame("", index=df.index, columns=df.columns)
         for col in df.columns:
             if col not in DATE_COLS: continue
             for idx in df.index:
                 val = str(df.at[idx, col])
-                dates_found = re.findall(r"\b(\d{1,2}/\d{1,2})\b|\b(\d{4}-\d{2}-\d{2})\b", val)
+                dates_found = _re.findall(r"\b(\d{1,2}/\d{1,2})\b|\b(\d{4}-\d{2}-\d{2})\b", val)
                 for grp in dates_found:
                     raw = grp[0] or grp[1]
                     if is_this_week_str(raw):
