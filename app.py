@@ -643,6 +643,15 @@ with page_tab1:
             def auto_save_callback(sec=sec, original_df=original_df):
                 state = st.session_state.get(f"edit_{sec}")
                 if state is None: return
+                # ✅ 若本次變動只有勾選「🗑 刪除」欄，跳過自動儲存
+                # 讓刪除按鈕有機會顯示出來
+                edited_rows = state.get("edited_rows", {})
+                only_delete_checked = all(
+                    set(changes.keys()) == {"🗑 刪除"}
+                    for changes in edited_rows.values()
+                ) if edited_rows else False
+                if only_delete_checked:
+                    return   # 不儲存，不重整，讓按鈕正常顯示
                 saved = do_save(sec, original_df, state)
                 if saved > 0:
                     st.cache_data.clear()
