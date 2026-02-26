@@ -38,7 +38,7 @@ def check_password():
     # ------------------------------------------------
    
 
-else:
+
     # 如果密碼不正確，停止後續所有程式碼執行
     st.stop()
 import streamlit as st
