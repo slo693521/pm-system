@@ -257,44 +257,46 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
             else: row_dict["status_type"] = "not_started"
 
         # ── 自動計算完成率 ────────────────────────────────────
-        # 規則：依最高已填工序自動設定，組立/噴漆試壓為手動區間不自動覆蓋
+        # 規則：依「目前已填的最高工序」決定完成率，刪除日期時同步降低
+        # 製造圖面(drawing) 不計入完成率
+
         def filled(col): return bool(row_dict.get(col,"").strip())
 
-        # 手動區間：assembly(60-80%) / painting+pressure_test(90%) 若已在此範圍則保留
-        cur_pct_str = row_dict.get("completion","").replace("%","").strip()
-        try:
-            cur_pct = int(float(cur_pct_str))
-        except:
-            cur_pct = 0
+        # 由低到高依序評估，最後符合的工序決定基準完成率
+        # drawing 跳過，不影響百分比
+        auto_pct = 0   # 預設 0%，讓刪光所有工序可退回 0
 
-        auto_pct = None
-        # 由低到高掃，最後一個符合的 = 當前進度
-        if filled("drawing"):     auto_pct = 10
-        if filled("pipe_support"): auto_pct = 20
-        if filled("welding"):      auto_pct = 30
-        if filled("nde"):          auto_pct = 40
-        if filled("sandblast"):    auto_pct = 50
-        if filled("handover"):     auto_pct = 100   # 已交站
+        if filled("pipe_support"):  auto_pct = 20
+        if filled("welding"):       auto_pct = 30
+        if filled("nde"):           auto_pct = 40
+        if filled("sandblast"):     auto_pct = 50
 
-        # 組立（60-80%）：若已填且當前 < 60，自動設 60；若已在 60-80 保留
+        # 組立（60-80%）：填了就至少 60%，若手動在 60-80 之間則保留手動值
         if filled("assembly"):
-            if auto_pct is None or auto_pct < 60:
-                if cur_pct < 60:
-                    auto_pct = 60
-                else:
-                    auto_pct = None  # 保留手動值
+            cur_pct_str = row_dict.get("completion","").replace("%","").strip()
+            try:   cur_pct = int(float(cur_pct_str))
+            except: cur_pct = 0
+            if 60 <= cur_pct <= 80:
+                auto_pct = cur_pct   # 保留手動值
+            else:
+                auto_pct = 60        # 至少跳到 60%
 
-        # 噴漆/試壓（90%）：若已填且當前 < 90，自動設 90；若已 >= 90 保留
+        # 噴漆/試壓（90%）：填了就至少 90%，若手動 >= 90 則保留
         if filled("painting") or filled("pressure_test"):
-            if auto_pct is None or auto_pct < 90:
-                if cur_pct < 90:
-                    auto_pct = 90
-                else:
-                    auto_pct = None  # 保留手動值
+            cur_pct_str = row_dict.get("completion","").replace("%","").strip()
+            try:   cur_pct = int(float(cur_pct_str))
+            except: cur_pct = 0
+            if cur_pct >= 90:
+                auto_pct = cur_pct   # 保留手動值（如 95%）
+            else:
+                auto_pct = 90
 
-        # 只在 auto_pct 確實更高時才覆蓋（不往回退）
-        if auto_pct is not None and auto_pct > cur_pct:
-            row_dict["completion"] = f"{auto_pct}%"
+        # 交站 → 100%
+        if filled("handover"):
+            auto_pct = 100
+
+        # 直接覆蓋（刪除日期時也會往下調整）
+        row_dict["completion"] = f"{auto_pct}%" if auto_pct > 0 else ""
 
         return row_dict
 
