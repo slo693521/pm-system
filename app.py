@@ -134,15 +134,19 @@ def is_this_week(dt_str: str) -> bool:
         if not dt_str or dt_str in ("", "None", "nan"): return False
         dt = pd.to_datetime(dt_str, errors="coerce")
         if pd.isna(dt): return False
-        return dt.replace(tzinfo=None) >= _week_start()
+        ws = _week_start()
+        we = ws + timedelta(days=7)
+        d  = dt.replace(tzinfo=None)
+        return ws <= d < we
     except: return False
 
 def is_this_week_str(raw: str) -> bool:
-    """支援 M/D 及 YYYY-MM-DD 格式，判斷是否本週"""
+    """支援 M/D 及 YYYY-MM-DD 格式，判斷是否本週（含週一到週日）"""
     try:
         raw = raw.strip()
         if not raw: return False
-        # M/D 格式：補上當年年份
+        ws = _week_start()
+        we = ws + timedelta(days=7)
         if re.match(r"^\d{1,2}/\d{1,2}$", raw):
             year = datetime.now().year
             dt = datetime.strptime(f"{year}/{raw}", "%Y/%m/%d")
@@ -150,7 +154,7 @@ def is_this_week_str(raw: str) -> bool:
             dt = pd.to_datetime(raw, errors="coerce")
             if pd.isna(dt): return False
             dt = dt.to_pydatetime()
-        return dt.replace(tzinfo=None) >= _week_start()
+        return ws <= dt.replace(tzinfo=None) < we
     except: return False
 
 # ── 自動儲存函式 ──────────────────────────────────────────
