@@ -36,21 +36,54 @@ st.markdown("""
 <style>
   .block-container { padding-top: 0.5rem !important; }
   header[data-testid="stHeader"] { background: transparent; }
+
+  /* ── 分區標題 ── */
   .section-header {
     background: linear-gradient(90deg, #0d2137, #1a3a5c); color: white;
-    padding: 10px 16px; border-radius: 6px;
-    font-size: 15px; font-weight: 800; margin: 14px 0 6px 0; letter-spacing: 1px;
+    padding: 12px 16px; border-radius: 6px;
+    font-size: 16px; font-weight: 800; margin: 14px 0 6px 0; letter-spacing: 1px;
   }
-  div[data-testid="stMetricValue"] { font-size: 1.8rem; font-weight: 900; }
-  div[data-testid="stMetric"] { background:#f8faff; border-radius:8px; padding:8px; }
-  .stButton > button { border-radius: 20px !important; font-size: 13px !important; }
+
+  /* ── 統計卡片 ── */
+  div[data-testid="stMetricValue"] { font-size: 1.6rem; font-weight: 900; color: #0d2137; }
+  div[data-testid="stMetricLabel"] { font-size: 0.85rem; font-weight: 700; color: #333; }
+  div[data-testid="stMetric"] { background:#f0f4ff; border-radius:10px; padding:10px 8px; border: 1px solid #c5d0f0; }
+
+  /* ── 按鈕 ── */
+  .stButton > button {
+    border-radius: 20px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    min-height: 44px !important;   /* 手機觸控友善 */
+    color: #111 !important;
+  }
+
+  /* ── 圖例列 ── */
   .legend-bar {
-    display: flex; gap: 14px; flex-wrap: wrap; background: #f8f9fa; padding: 7px 14px;
-    border-radius: 6px; margin-bottom: 8px; font-size: 12px; align-items: center;
+    display: flex; gap: 10px; flex-wrap: wrap; background: #f0f4ff;
+    padding: 8px 14px; border-radius: 6px; margin-bottom: 8px;
+    font-size: 13px; font-weight: 600; color: #222; align-items: center;
+    border: 1px solid #c5d0f0;
   }
   .color-box {
-    width: 13px; height: 13px; border-radius: 3px;
-    border: 1px solid #bbb; display: inline-block; vertical-align: middle;
+    width: 14px; height: 14px; border-radius: 3px;
+    border: 1px solid #666; display: inline-block; vertical-align: middle;
+  }
+
+  /* ── dataframe 全域字色加深 ── */
+  [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th {
+    color: #111 !important;
+    font-size: 13px !important;
+  }
+
+  /* ── 手機版 RWD ── */
+  @media (max-width: 768px) {
+    .block-container { padding: 0.5rem 0.5rem !important; }
+    div[data-testid="stMetricValue"] { font-size: 1.3rem !important; }
+    .stButton > button { font-size: 12px !important; min-height: 40px !important; }
+    .section-header { font-size: 14px !important; padding: 8px 12px; }
+    .legend-bar { font-size: 12px !important; }
+    [data-testid="stDataFrame"] td { font-size: 12px !important; }
   }
 </style>
 """, unsafe_allow_html=True)
@@ -170,14 +203,26 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
     saved = 0
     now_iso = datetime.now().isoformat()
 
+    # 這些欄位不存在於 Supabase，送出前必須移除
+    NON_DB_COLS = {"🗑 刪除", "status_zh", "id"}
+
     def build_row_dict(base_row: pd.Series, changes: dict) -> dict:
         merged = base_row.to_dict()
         merged.update(changes)
-        row_dict = {k: ("" if pd.isna(v) or str(v) in ["None","nan","NaN",""] else str(v))
-                    for k, v in merged.items()}
+        row_dict = {}
+        for k, v in merged.items():
+            if k in NON_DB_COLS: continue          # ← 過濾非 DB 欄位
+            # 空值（含清除日期）一律存為空字串，不跳過
+            if not isinstance(v, str) and pd.isna(v):
+                row_dict[k] = ""
+            elif str(v) in ["None","nan","NaN"]:
+                row_dict[k] = ""
+            else:
+                row_dict[k] = str(v)
         row_dict["section"]    = sec
         row_dict["updated_at"] = now_iso
-        zh_label = row_dict.pop("status_zh", "")
+        # 中文狀態 → 英文 key
+        zh_label = str(merged.get("status_zh",""))
         if zh_label in STATUS_ZH_TO_KEY:
             row_dict["status_type"] = STATUS_ZH_TO_KEY[zh_label]
         if not row_dict.get("status_type"):
