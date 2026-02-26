@@ -6,7 +6,7 @@ def check_password():
     def password_entered():
         """檢查輸入的密碼是否正確。"""
         # 這裡的 "my_secret_password" 請改成你想設定的密碼
-        if st.session_state["password"] == "123456":
+        if st.session_state["password"] == st.secrets["password"]:
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # 為了安全，刪除輸入暫存
         else:
