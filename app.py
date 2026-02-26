@@ -122,16 +122,34 @@ COL_CONFIG = {
 }
 
 # ── 本週判斷 ──────────────────────────────────────────────
+def _week_start():
+    now = datetime.now()
+    ws  = now - timedelta(days=now.weekday())
+    return ws.replace(hour=0, minute=0, second=0, microsecond=0)
+
 def is_this_week(dt_str: str) -> bool:
-    """判斷日期字串是否在本週內"""
+    """判斷 ISO 日期字串是否在本週內（供 updated_at 使用）"""
     try:
         if not dt_str or dt_str in ("", "None", "nan"): return False
         dt = pd.to_datetime(dt_str, errors="coerce")
         if pd.isna(dt): return False
-        now = datetime.now()
-        week_start = now - timedelta(days=now.weekday())  # 本週一
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        return dt.replace(tzinfo=None) >= week_start
+        return dt.replace(tzinfo=None) >= _week_start()
+    except: return False
+
+def is_this_week_str(raw: str) -> bool:
+    """支援 M/D 及 YYYY-MM-DD 格式，判斷是否本週"""
+    try:
+        raw = raw.strip()
+        if not raw: return False
+        # M/D 格式：補上當年年份
+        if re.match(r"^\d{1,2}/\d{1,2}$", raw):
+            year = datetime.now().year
+            dt = datetime.strptime(f"{year}/{raw}", "%Y/%m/%d")
+        else:
+            dt = pd.to_datetime(raw, errors="coerce")
+            if pd.isna(dt): return False
+            dt = dt.to_pydatetime()
+        return dt.replace(tzinfo=None) >= _week_start()
     except: return False
 
 # ── 自動儲存函式 ──────────────────────────────────────────
@@ -269,7 +287,7 @@ with page_tab1:
       <span><span class="color-box" style="background:#FFFFFF"></span> 未開始</span>
       <span><span class="color-box" style="background:#FFE0B2"></span> 停工</span>
       <span><span class="color-box" style="background:#F0F0F0"></span> 已完成</span>
-      <span><span class="color-box" style="background:#ffebee;border:1px solid #ef9a9a"></span> 本週更新 🔴</span>
+      <span style="color:#c62828;font-weight:900">🔴 本週日期</span>
       <span style="margin-left:auto;color:#999;font-size:11px;">★ 展開「✏️ 編輯」→ 改完即自動儲存</span>
     </div>
     """, unsafe_allow_html=True)
@@ -291,14 +309,34 @@ with page_tab1:
 
     st.caption(f"顯示 **{len(df)}** / {len(df_all)} 筆")
 
-    # ✅ 列顏色：本週更新 → 紅色底；其他 → 狀態底色
+    # 列底色 = 狀態顏色；日期欄若為本週 → 紅字加粗（逐格）
+    # 哪些欄位「可能含日期」（會被本週偵測）
+    DATE_COLS = {"drawing","pipe_support","welding","nde","sandblast",
+                 "assembly","painting","pressure_test","handover","tracking",
+                 "materials","contact","status","completion"}
+
     def color_rows(row):
-        updated_at = row.get("updated_at","") if "updated_at" in row.index else ""
-        if is_this_week(str(updated_at)):
-            bg = "#ffebee"   # 淺紅，本週更新
-        else:
-            bg = STATUS_CONFIG.get(row.get("status_type",""),{}).get("bg","#FFFFFF")
+        """整列底色 = 狀態顏色"""
+        bg = STATUS_CONFIG.get(row.get("status_type",""),{}).get("bg","#FFFFFF")
         return [f"background-color:{bg}" for _ in row]
+
+    def highlight_week_cells(df_styled):
+        """逐格：含本週日期的格子 → 紅字加粗"""
+        styles = pd.DataFrame("", index=df_styled.data.index, columns=df_styled.data.columns)
+        for col in df_styled.data.columns:
+            if col not in DATE_COLS: continue
+            for idx in df_styled.data.index:
+                val = str(df_styled.data.at[idx, col])
+                # 抽出所有「M/D」或「YYYY-MM-DD」型日期片段
+                import re
+                # 匹配 1/1 ~ 12/31 或 YYYY-MM-DD
+                dates_found = re.findall(r"\b(\d{1,2}/\d{1,2})\b|\b(\d{4}-\d{2}-\d{2})\b", val)
+                for grp in dates_found:
+                    raw = grp[0] or grp[1]
+                    if is_this_week_str(raw):
+                        styles.at[idx, col] = "color:#c62828;font-weight:900"
+                        break
+        return styles
 
     sections_to_show = SECTIONS if filter_section=="全部分區" else [filter_section]
 
@@ -338,7 +376,10 @@ with page_tab1:
             if extra in df_sec.columns and extra not in styled_df.columns:
                 styled_df[extra] = df_sec[extra].values
 
-        styled = styled_df.style.apply(color_rows, axis=1).format(na_rep="")
+        styled = (styled_df.style
+                  .apply(color_rows, axis=1)          # 整列底色 = 狀態色
+                  .apply(highlight_week_cells, axis=None)  # 本週日期格 = 紅字
+                  .format(na_rep=""))
         st.dataframe(styled, use_container_width=True, hide_index=True,
                      height=min(420, 38+len(df_sec)*35),
                      column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
