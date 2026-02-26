@@ -275,9 +275,23 @@ with page_tab1:
     with st.expander("📄 匯出 PDF"):
         if st.button("產生 PDF"):
             try:
-                from fpdf import FPDF; import tempfile,os
-                pdf = FPDF(orientation="L",format="A3")
-                pdf.set_auto_page_break(auto=True,margin=10)
+                from fpdf import FPDF
+                import tempfile, os, urllib.request
+
+                # ── 取得中文字型 ──────────────────────────
+                font_path = "/tmp/NotoSansSC.ttf"
+                if not os.path.exists(font_path):
+                    with st.spinner("首次使用：下載中文字型中（約5秒）..."):
+                        urllib.request.urlretrieve(
+                            "https://github.com/googlefonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+                            font_path
+                        )
+
+                pdf = FPDF(orientation="L", format="A3")
+                pdf.set_auto_page_break(auto=True, margin=10)
+                pdf.add_font("Chinese", "", font_path)
+                pdf.add_font("Chinese", "B", font_path)
+
                 HEADERS=["施工順序","完成率","備料","案號","工程名稱","業主",
                          "備註","製造圖面","管撐","研磨點焊","NDE","噴砂",
                          "組立","噴漆","試壓","交站","年份","窗口"]
@@ -287,30 +301,36 @@ with page_tab1:
                 WIDTHS=[20,11,7,22,55,13,30,13,11,18,11,11,11,11,11,15,9,13]
                 PDF_BG={"in_progress":(255,255,153),"pending":(204,232,255),
                         "not_started":(255,255,255),"suspended":(255,224,178),"completed":(240,240,240)}
+
                 for sec in SECTIONS:
-                    df_sec=df_all[df_all["section"]==sec] if not df_all.empty else pd.DataFrame()
+                    df_sec = df_all[df_all["section"]==sec] if not df_all.empty else pd.DataFrame()
                     if df_sec.empty: continue
                     pdf.add_page()
-                    pdf.set_font("Helvetica","B",13); pdf.set_text_color(10,35,80)
-                    pdf.cell(0,9,f"[{sec}]  ({today})  {len(df_sec)} items",ln=True); pdf.ln(1)
-                    pdf.set_font("Helvetica","B",7)
+                    pdf.set_font("Chinese","B",13)
+                    pdf.set_text_color(10,35,80)
+                    pdf.cell(0,9,f"【{sec}】  ({today})  共{len(df_sec)}筆",ln=True)
+                    pdf.ln(1)
+                    pdf.set_font("Chinese","B",7)
                     pdf.set_fill_color(29,71,157); pdf.set_text_color(255,255,255)
-                    for h,w in zip(HEADERS,WIDTHS): pdf.cell(w,7,h,border=1,fill=True,align="C")
-                    pdf.ln(); pdf.set_font("Helvetica","",6.5); pdf.set_text_color(30,30,30)
+                    for h,w in zip(HEADERS,WIDTHS):
+                        pdf.cell(w,7,h,border=1,fill=True,align="C")
+                    pdf.ln()
+                    pdf.set_font("Chinese","",6.5); pdf.set_text_color(30,30,30)
                     for _,row in df_sec.iterrows():
-                        rgb=PDF_BG.get(row.get("status_type",""),(255,255,255))
+                        rgb = PDF_BG.get(row.get("status_type",""),(255,255,255))
                         pdf.set_fill_color(*rgb)
                         for k,w in zip(KEYS,WIDTHS):
-                            val=str(row.get(k,"") or "")
-                            if len(val)>18: val=val[:17]+"…"
+                            val = str(row.get(k,"") or "")
+                            if len(val)>18: val = val[:17]+"…"
                             pdf.cell(w,6,val,border=1,fill=True)
                         pdf.ln()
+
                 with tempfile.NamedTemporaryFile(delete=False,suffix=".pdf") as tmp:
                     pdf.output(tmp.name)
                     with open(tmp.name,"rb") as f: pdf_bytes=f.read()
                     os.unlink(tmp.name)
-                fname=f"工程案執行進度_{datetime.now().strftime('%Y%m%d')}.pdf"
-                st.download_button("⬇ 下載 PDF",pdf_bytes,file_name=fname,mime="application/pdf")
+                fname = f"工程案執行進度_{datetime.now().strftime('%Y%m%d')}.pdf"
+                st.download_button("⬇ 下載 PDF", pdf_bytes, file_name=fname, mime="application/pdf")
             except Exception as e:
                 st.error(f"PDF 失敗：{e}")
 
