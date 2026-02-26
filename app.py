@@ -39,9 +39,8 @@ if not check_password():
     st.stop()
 
 # ==========================================================
-# 2. 以下是你原本 100% 原汁原味的系統內容
+# 2. 系統主程式 (完全保留你原本的設計)
 # ==========================================================
-
 st.set_page_config(
     page_title="工程案執行進度管理系統",
     page_icon="⚙",
@@ -298,8 +297,8 @@ with page_tab1:
                             elif "停工" in s:  row_dict["status_type"]="suspended"
                             elif "交站" in s or row_dict.get("completion")=="100%":
                                 row_dict["status_type"]="completed"
-                                
-                        # ── 【新增：自動記錄開始日期】 ──
+                        
+                        # ── 【核心魔法：自動記錄開工日期】 ──
                         if row_dict.get("status_type") == "in_progress":
                             if i < len(ids):
                                 old_row = df_all[df_all["id"] == str(ids[i])]
@@ -308,8 +307,8 @@ with page_tab1:
                                     row_dict["started_at"] = datetime.now().strftime("%Y-%m-%d")
                             else:
                                 row_dict["started_at"] = datetime.now().strftime("%Y-%m-%d")
-                        # ────────────────────────────
-                                
+                        # ──────────────────────────────
+                        
                         if i < len(ids):
                             supabase.table("projects").update(row_dict).eq("id",ids[i]).execute()
                         else:
