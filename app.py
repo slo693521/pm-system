@@ -1,4 +1,53 @@
 import streamlit as st
+
+def check_password():
+    """如果密碼正確則返回 True，否則顯示密碼輸入框。"""
+
+    def password_entered():
+        """檢查輸入的密碼是否正確。"""
+        # 這裡的 "my_secret_password" 請改成你想設定的密碼
+        if st.session_state["password"] == "123456":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # 為了安全，刪除輸入暫存
+        else:
+            st.session_state["password_correct"] = False
+
+    # 如果已經驗證過，直接返回 True
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # 顯示密碼輸入介面
+    st.title("🔒 存取受限")
+    st.text_input(
+        "本 App 僅供授權人員使用，請輸入訪問密碼：", 
+        type="password", 
+        on_change=password_entered, 
+        key="password"
+    )
+
+    if "password_correct" in st.session_state:
+        st.error("😕 密碼錯誤，請再試一次。")
+        
+    return False
+
+# --- 主程式控制邏輯 ---
+
+if check_password():
+    # ------------------------------------------------
+    # 這裡放你原本所有的 App 內容
+    # ------------------------------------------------
+    st.success("✅ 認證成功！歡迎進入系統")
+    st.title("🚀 我的私密數據後台")
+    
+    st.write("現在路人看不到這裡的內容了。")
+    
+    # 範例：顯示機密資料
+    st.dataframe({"機密項目": ["薪資", "密碼", "客戶清單"], "內容": [100, "abc", "Secret"]})
+
+else:
+    # 如果密碼不正確，停止後續所有程式碼執行
+    st.stop()
+import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 from datetime import datetime
