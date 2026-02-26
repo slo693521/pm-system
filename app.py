@@ -224,7 +224,7 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
     now_iso = datetime.now().isoformat()
 
     # 不送進 Supabase 的前端欄位（id 單獨處理，不放這裡）
-    NON_DB_COLS = {"status_zh", "_order"}
+    NON_DB_COLS = {"🗑 刪除", "status_zh", "_order"}
 
     def clean_val(v) -> str:
         """任何值轉乾淨字串，None/nan → 空字串"""
@@ -331,6 +331,17 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
             saved += 1
         except Exception as e:
             st.toast(f"⚠️ 新增失敗：{e}", icon="❌")
+
+    # 3. 刪除列（勾選🗑後由編輯區按鈕處理，這裡處理 data_editor 內建刪除）
+    for row_idx in editor_state.get("deleted_rows", []):
+        try:
+            idx       = int(row_idx)
+            record_id = clean_val(original_df.iloc[idx].get("id","")) if idx < len(original_df) else ""
+            if record_id and record_id not in ("","None"):
+                supabase.table("projects").delete().eq("id", record_id).execute()
+                saved += 1
+        except Exception as e:
+            st.toast(f"⚠️ 刪除失敗 row {row_idx}：{e}", icon="❌")
 
     return saved
 
@@ -624,6 +635,7 @@ with page_tab1:
             for _c in edit_df.columns:
                 edit_df[_c] = edit_df[_c].replace({"None":"","nan":"","NaN":""})
             edit_df["status_zh"] = edit_df["status_type"].map(STATUS_KEY_TO_ZH).fillna("")
+            edit_df.insert(0, "🗑 刪除", False)   # 勾選欄放最前面
 
             original_df = edit_df.copy()
             edit_key    = f"edit_{sec}"
@@ -636,21 +648,45 @@ with page_tab1:
                     st.cache_data.clear()
                     st.toast(f"✅ 自動儲存 {saved} 筆！", icon="💾")
 
-            st.data_editor(
+            edited = st.data_editor(
                 edit_df,
                 key=edit_key,
                 on_change=auto_save_callback,
-                column_config={k:v for k,v in COL_CONFIG.items()
-                               if k in edit_df.columns or k == "status_zh"},
+                column_config={
+                    **{k:v for k,v in COL_CONFIG.items()
+                       if k in edit_df.columns or k == "status_zh"},
+                    "🗑 刪除": st.column_config.CheckboxColumn(
+                        "🗑 刪除", help="勾選後按下方確認刪除", width="small"),
+                },
                 use_container_width=True,
                 num_rows="dynamic",
                 hide_index=True,
-                column_order=["status_zh","status","completion","materials",
+                column_order=["🗑 刪除","status_zh","status","completion","materials",
                               "case_no","project_name","client","tracking","drawing",
                               "pipe_support","welding","nde","sandblast","assembly",
                               "painting","pressure_test","handover","handover_year","contact"],
             )
-            st.caption("💡 修改後點擊其他地方自動儲存 ／ 末列空白列可新增")
+
+            # 勾選刪除按鈕
+            del_rows = edited[edited["🗑 刪除"] == True]
+            if not del_rows.empty:
+                st.warning(f"⚠️ 已勾選 {len(del_rows)} 列，按下方按鈕確認刪除")
+                if st.button(f"🗑 確認刪除 {len(del_rows)} 列",
+                             key=f"del_btn_{sec}", type="primary"):
+                    deleted = 0
+                    for _, row in del_rows.iterrows():
+                        rid = str(row.get("id",""))
+                        if rid and rid not in ("","None"):
+                            try:
+                                supabase.table("projects").delete().eq("id", rid).execute()
+                                deleted += 1
+                            except Exception as e:
+                                st.toast(f"刪除失敗：{e}", icon="❌")
+                    st.success(f"✅ 已刪除 {deleted} 列")
+                    st.cache_data.clear()
+                    st.rerun()
+            else:
+                st.caption("💡 修改後點擊其他地方自動儲存 ／ 末列空白列可新增 ／ 勾選🗑可刪除整列")
 
     # ── 重新整理按鈕 ──────────────────────────────────────
     st.divider()
