@@ -85,24 +85,24 @@ DISPLAY_COLS = [
 ]
 
 COL_CONFIG = {
-    "status":        st.column_config.TextColumn("施工順序", width="medium"),
-    "completion":    st.column_config.TextColumn("完成率", width="small"),
-    "materials":     st.column_config.TextColumn("備料", width="small"),
-    "case_no":       st.column_config.TextColumn("案號", width="medium"),
+    "status":        st.column_config.TextColumn("施工順序"),
+    "completion":    st.column_config.TextColumn("完成率"),
+    "materials":     st.column_config.TextColumn("備料"),
+    "case_no":       st.column_config.TextColumn("案號"),
     "project_name":  st.column_config.TextColumn("工程名稱", width="large"),
-    "client":        st.column_config.TextColumn("業主", width="small"),
-    "tracking":      st.column_config.TextColumn("備註", width="large"),   # ← 改名
-    "drawing":       st.column_config.TextColumn("製造圖面", width="small"),
-    "pipe_support":  st.column_config.TextColumn("管撐製作", width="small"),
-    "welding":       st.column_config.TextColumn("研磨點焊", width="medium"),
-    "nde":           st.column_config.TextColumn("焊道NDE", width="small"),
-    "sandblast":     st.column_config.TextColumn("噴砂", width="small"),
-    "assembly":      st.column_config.TextColumn("組立*", width="small"),
-    "painting":      st.column_config.TextColumn("噴漆", width="small"),
-    "pressure_test": st.column_config.TextColumn("試壓", width="small"),
-    "handover":      st.column_config.TextColumn("交站", width="medium"),
-    "handover_year": st.column_config.SelectboxColumn("年份", options=["","114","115","116"], width="small"),
-    "contact":       st.column_config.TextColumn("對應窗口", width="small"),
+    "client":        st.column_config.TextColumn("業主"),
+    "tracking":      st.column_config.TextColumn("備註", width="medium"),
+    "drawing":       st.column_config.TextColumn("製造圖面"),
+    "pipe_support":  st.column_config.TextColumn("管撐製作"),
+    "welding":       st.column_config.TextColumn("研磨點焊"),
+    "nde":           st.column_config.TextColumn("焊道NDE"),
+    "sandblast":     st.column_config.TextColumn("噴砂"),
+    "assembly":      st.column_config.TextColumn("組立*"),
+    "painting":      st.column_config.TextColumn("噴漆"),
+    "pressure_test": st.column_config.TextColumn("試壓"),
+    "handover":      st.column_config.TextColumn("交站"),
+    "handover_year": st.column_config.SelectboxColumn("年份", options=["","114","115","116"]),
+    "contact":       st.column_config.TextColumn("對應窗口"),
 }
 
 # ── 標題 ──────────────────────────────────────────────────
