@@ -115,7 +115,7 @@ supabase = get_supabase()
 
 @st.cache_data(ttl=15)
 def load_data() -> pd.DataFrame:
-    res = supabase.table("projects").select("*").order("id", desc=True).execute()
+    res = supabase.table("projects").select("*").order("case_no", desc=True).execute()
     if not res.data: return pd.DataFrame()
     df = pd.DataFrame(res.data)
     for col in df.columns:
