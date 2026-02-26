@@ -34,57 +34,75 @@ st.set_page_config(page_title="工程案執行進度管理系統",
 
 st.markdown("""
 <style>
-  .block-container { padding-top: 0.5rem !important; }
+  /* ══ 基礎 ══ */
+  .block-container { padding-top: 0.3rem !important; padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
   header[data-testid="stHeader"] { background: transparent; }
 
-  /* ── 分區標題 ── */
+  /* ══ 自訂統計卡（HTML，完全控制顏色）══ */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px; margin-bottom: 10px;
+  }
+  .kpi-card {
+    background: #1a3a5c; border-radius: 10px;
+    padding: 10px 8px; text-align: center;
+    border: 1px solid #2a5080;
+  }
+  .kpi-label { color: #90caf9; font-size: 12px; font-weight: 700; margin-bottom: 2px; }
+  .kpi-value { color: #ffffff; font-size: 1.6rem; font-weight: 900; line-height: 1.1; }
+
+  /* ══ 分區標題 ══ */
   .section-header {
-    background: linear-gradient(90deg, #0d2137, #1a3a5c); color: white;
-    padding: 12px 16px; border-radius: 6px;
-    font-size: 16px; font-weight: 800; margin: 14px 0 6px 0; letter-spacing: 1px;
+    background: linear-gradient(90deg, #0d2137, #1a3a5c); color: #fff;
+    padding: 10px 14px; border-radius: 8px;
+    font-size: 15px; font-weight: 800; margin: 12px 0 6px 0; letter-spacing: 1px;
   }
 
-  /* ── 統計卡片 ── */
-  div[data-testid="stMetricValue"] { font-size: 1.6rem; font-weight: 900; color: #0d2137; }
-  div[data-testid="stMetricLabel"] { font-size: 0.85rem; font-weight: 700; color: #333; }
-  div[data-testid="stMetric"] { background:#f0f4ff; border-radius:10px; padding:10px 8px; border: 1px solid #c5d0f0; }
-
-  /* ── 按鈕 ── */
+  /* ══ 狀態篩選按鈕 ══ */
   .stButton > button {
-    border-radius: 20px !important;
-    font-size: 14px !important;
+    border-radius: 18px !important;
+    font-size: 13px !important;
     font-weight: 700 !important;
-    min-height: 44px !important;   /* 手機觸控友善 */
+    min-height: 42px !important;
     color: #111 !important;
+    padding: 4px 6px !important;
   }
 
-  /* ── 圖例列 ── */
+  /* ══ 圖例列 ══ */
   .legend-bar {
-    display: flex; gap: 10px; flex-wrap: wrap; background: #f0f4ff;
-    padding: 8px 14px; border-radius: 6px; margin-bottom: 8px;
-    font-size: 13px; font-weight: 600; color: #222; align-items: center;
-    border: 1px solid #c5d0f0;
+    display: flex; gap: 8px; flex-wrap: wrap;
+    background: #1e3a5f; padding: 8px 12px; border-radius: 8px;
+    margin-bottom: 8px; font-size: 12px; font-weight: 600;
+    color: #e3f0ff; align-items: center; border: 1px solid #2a5080;
   }
   .color-box {
-    width: 14px; height: 14px; border-radius: 3px;
-    border: 1px solid #666; display: inline-block; vertical-align: middle;
+    width: 13px; height: 13px; border-radius: 3px;
+    border: 1px solid #888; display: inline-block; vertical-align: middle;
   }
 
-  /* ── dataframe 全域字色加深 ── */
-  [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th {
-    color: #111 !important;
-    font-size: 13px !important;
+  /* ══ 工程卡片（手機用）══ */
+  .project-card {
+    background: #fff; border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 8px; border-left: 5px solid #1a3a5c;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
   }
+  .project-card.status-in_progress  { border-left-color: #e6c800; background: #fffff0; }
+  .project-card.status-pending       { border-left-color: #2196f3; background: #e8f4ff; }
+  .project-card.status-not_started   { border-left-color: #90a4ae; background: #fafafa; }
+  .project-card.status-suspended     { border-left-color: #ff7043; background: #fff3ee; }
+  .project-card.status-completed     { border-left-color: #757575; background: #f5f5f5; }
+  .card-title { font-size: 15px; font-weight: 800; color: #0d2137; margin-bottom: 4px; }
+  .card-sub   { font-size: 12px; color: #444; margin: 2px 0; }
+  .card-badge {
+    display: inline-block; border-radius: 12px; padding: 2px 10px;
+    font-size: 11px; font-weight: 700; margin: 4px 4px 0 0;
+  }
+  .card-red { color: #c62828; font-weight: 900; }
 
-  /* ── 手機版 RWD ── */
-  @media (max-width: 768px) {
-    .block-container { padding: 0.5rem 0.5rem !important; }
-    div[data-testid="stMetricValue"] { font-size: 1.3rem !important; }
-    .stButton > button { font-size: 12px !important; min-height: 40px !important; }
-    .section-header { font-size: 14px !important; padding: 8px 12px; }
-    .legend-bar { font-size: 12px !important; }
-    [data-testid="stDataFrame"] td { font-size: 12px !important; }
-  }
+  /* ══ dataframe 字色 ══ */
+  [data-testid="stDataFrame"] td { color: #111 !important; font-size: 13px !important; }
+  [data-testid="stDataFrame"] th { color: #fff !important; font-size: 12px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -203,28 +221,33 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
     saved = 0
     now_iso = datetime.now().isoformat()
 
-    # 這些欄位不存在於 Supabase，送出前必須移除
-    NON_DB_COLS = {"🗑 刪除", "status_zh", "id"}
+    # 不送進 Supabase 的前端欄位（id 單獨處理，不放這裡）
+    NON_DB_COLS = {"🗑 刪除", "status_zh"}
+
+    def clean_val(v) -> str:
+        """任何值轉乾淨字串，None/nan → 空字串"""
+        if v is None: return ""
+        if not isinstance(v, str):
+            try:
+                if pd.isna(v): return ""
+            except: pass
+        return "" if str(v) in ("None","nan","NaN","none") else str(v)
 
     def build_row_dict(base_row: pd.Series, changes: dict) -> dict:
+        """合併原始列與本次變動，回傳可直接 upsert 的 dict"""
         merged = base_row.to_dict()
         merged.update(changes)
         row_dict = {}
         for k, v in merged.items():
-            if k in NON_DB_COLS: continue          # ← 過濾非 DB 欄位
-            # 空值（含清除日期）一律存為空字串，不跳過
-            if not isinstance(v, str) and pd.isna(v):
-                row_dict[k] = ""
-            elif str(v) in ["None","nan","NaN"]:
-                row_dict[k] = ""
-            else:
-                row_dict[k] = str(v)
+            if k in NON_DB_COLS or k == "id": continue   # id 另外處理
+            row_dict[k] = clean_val(v)
         row_dict["section"]    = sec
         row_dict["updated_at"] = now_iso
-        # 中文狀態 → 英文 key
-        zh_label = str(merged.get("status_zh",""))
+        # 中文狀態下拉 → 英文 status_type（changes 裡的 status_zh 優先）
+        zh_label = clean_val(changes.get("status_zh", merged.get("status_zh","")))
         if zh_label in STATUS_ZH_TO_KEY:
             row_dict["status_type"] = STATUS_ZH_TO_KEY[zh_label]
+        # 備援推斷（status_type 仍然空）
         if not row_dict.get("status_type"):
             s = row_dict.get("status","")
             if "製作中" in s and "停工" not in s: row_dict["status_type"] = "in_progress"
@@ -239,11 +262,12 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
         try:
             idx = int(row_idx)
             if idx >= len(original_df): continue
-            row_dict   = build_row_dict(original_df.iloc[idx], changes)
-            record_id  = row_dict.pop("id", None)
-            if record_id and str(record_id) not in ("", "None"):
-                supabase.table("projects").update(row_dict).eq("id", record_id).execute()
-                saved += 1
+            base       = original_df.iloc[idx]
+            record_id  = clean_val(base.get("id",""))   # ← 直接從原始列取 id
+            if not record_id or record_id in ("","None"): continue
+            row_dict = build_row_dict(base, changes)
+            supabase.table("projects").update(row_dict).eq("id", record_id).execute()
+            saved += 1
         except Exception as e:
             st.toast(f"⚠️ 更新失敗 row {row_idx}：{e}", icon="❌")
 
@@ -258,13 +282,13 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
         except Exception as e:
             st.toast(f"⚠️ 新增失敗：{e}", icon="❌")
 
-    # 3. 刪除的列（標記 closed 而非真刪）
+    # 3. 勾選刪除（data_editor 內建刪除列）
     for row_idx in editor_state.get("deleted_rows", []):
         try:
             idx       = int(row_idx)
-            record_id = str(original_df.iloc[idx].get("id","")) if idx < len(original_df) else ""
+            record_id = clean_val(original_df.iloc[idx].get("id","")) if idx < len(original_df) else ""
             if record_id and record_id not in ("","None"):
-                supabase.table("projects").update({"closed":"已刪除"}).eq("id", record_id).execute()
+                supabase.table("projects").delete().eq("id", record_id).execute()
                 saved += 1
         except Exception as e:
             st.toast(f"⚠️ 刪除失敗 row {row_idx}：{e}", icon="❌")
@@ -286,12 +310,23 @@ st.markdown(f"""
 df_all = load_data()
 
 if not df_all.empty:
-    cols = st.columns(6)
     cts = df_all["status_type"].value_counts()
-    items = [("📋 全部", len(df_all))] + [
-        (f"{v['icon']} {v['label']}", int(cts.get(k,0))) for k,v in STATUS_CONFIG.items()
+    kpi_items = [
+        ("📋 全部",      len(df_all)),
+        ("⚙ 製作中",    int(cts.get("in_progress",0))),
+        ("📦 待交站",   int(cts.get("pending",0))),
+        ("⏳ 未開始",   int(cts.get("not_started",0))),
+        ("⏸ 停工",     int(cts.get("suspended",0))),
+        ("✅ 已完成",   int(cts.get("completed",0))),
     ]
-    for col,(label,val) in zip(cols, items): col.metric(label, val)
+    cards_html = "<div class='kpi-grid'>"
+    for label, val in kpi_items:
+        cards_html += f"""<div class='kpi-card'>
+          <div class='kpi-label'>{label}</div>
+          <div class='kpi-value'>{val}</div>
+        </div>"""
+    cards_html += "</div>"
+    st.markdown(cards_html, unsafe_allow_html=True)
 
 st.divider()
 page_tab1, page_tab2, page_tab3 = st.tabs(["📋 進度管理", "📊 工時分析", "⏱ 生產工時儀表板"])
@@ -305,8 +340,12 @@ with page_tab1:
         st.session_state.active_status = set()
 
     st.markdown("**狀態篩選**（可多選）")
-    btn_cols = st.columns(6)
-    with btn_cols[0]:
+    # 手機：3欄 2行；桌機：6欄 1行
+    btn_row1 = st.columns(3)
+    btn_row2 = st.columns(3)
+    all_btns = btn_row1 + btn_row2   # 共 6 格
+
+    with all_btns[0]:
         is_all = not st.session_state.active_status
         if st.button("📋 全部" + (" ✓" if is_all else ""),
                      use_container_width=True,
@@ -316,7 +355,7 @@ with page_tab1:
     for i,(key,cfg) in enumerate(STATUS_CONFIG.items()):
         active = key in st.session_state.active_status
         count  = int(df_all["status_type"].value_counts().get(key,0)) if not df_all.empty else 0
-        with btn_cols[i+1]:
+        with all_btns[i+1]:
             if st.button(f"{cfg['icon']} {cfg['label']} ({count})" + (" ✓" if active else ""),
                          use_container_width=True,
                          type="primary" if active else "secondary"):
@@ -324,10 +363,10 @@ with page_tab1:
                 else:      st.session_state.active_status.add(key)
                 st.rerun()
 
-    f1,f2,f3 = st.columns([3,1.5,1.5])
-    with f1: search = st.text_input("🔍", placeholder="搜尋案號 / 工程名稱 / 業主 / 窗口", label_visibility="collapsed")
-    with f2: filter_year = st.selectbox("年份", ["全部年份","115","114","未填年份"], label_visibility="collapsed")
-    with f3: filter_section = st.selectbox("分區", ["全部分區"]+SECTIONS, label_visibility="collapsed")
+    search = st.text_input("🔍 搜尋", placeholder="案號 / 工程名稱 / 業主 / 窗口", label_visibility="collapsed")
+    ff1, ff2 = st.columns(2)
+    with ff1: filter_year    = st.selectbox("年份", ["全部年份","115","114","未填年份"], label_visibility="collapsed")
+    with ff2: filter_section = st.selectbox("分區", ["全部分區"]+SECTIONS, label_visibility="collapsed")
 
     st.markdown("""
     <div class="legend-bar">
@@ -428,19 +467,81 @@ with page_tab1:
             if extra in df_sec.columns and extra not in styled_df.columns:
                 styled_df[extra] = df_sec[extra].values
 
-        styled = (styled_df.style
-                  .apply(color_rows, axis=1)   # 整列底色 = 狀態色
-                  .apply(highlight_col, axis=0)  # 本週日期格 = 紅字加粗
-                  .format(na_rep=""))
-        st.dataframe(styled, use_container_width=True, hide_index=True,
-                     height=min(420, 38+len(df_sec)*35),
-                     column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
+        # ── 桌機：一般表格 ／ 手機：卡片清單（用 expander 切換）──
+        view_mode = st.radio("顯示模式", ["📋 表格", "📱 卡片（手機適用）"],
+                             horizontal=True, key=f"view_{sec}", label_visibility="collapsed")
+
+        if view_mode == "📋 表格":
+            styled = (styled_df.style
+                      .apply(color_rows, axis=1)
+                      .apply(highlight_col, axis=0)
+                      .format(na_rep=""))
+            st.dataframe(styled, use_container_width=True, hide_index=True,
+                         height=min(420, 38+len(df_sec)*35),
+                         column_config={k:v for k,v in COL_CONFIG.items() if k in show_df.columns})
+        else:
+            # ── 手機卡片視圖 ──
+            import re as _re
+            for _, row in df_sec.iterrows():
+                st_key = str(row.get("status_type","not_started"))
+                bg_color = STATUS_CONFIG.get(st_key,{}).get("bg","#fff")
+                border_color = STATUS_CONFIG.get(st_key,{}).get("btn","#ccc")
+                status_label = STATUS_CONFIG.get(st_key,{}).get("label","")
+                status_icon  = STATUS_CONFIG.get(st_key,{}).get("icon","")
+
+                # 工序進度格子
+                proc_html = ""
+                for col, name in zip(PROCESS_COLS, PROCESS_NAMES):
+                    val = str(row.get(col,""))
+                    done = val.strip() not in ("","None","nan","-")
+                    is_week = False
+                    hits = _re.findall(r"(?<![\d])(\d{1,2}/\d{1,2})(?![\d])", val)
+                    hits += _re.findall(r"(\d{4}-\d{2}-\d{2})", val)
+                    for raw in hits:
+                        if is_this_week_str(raw): is_week = True; break
+                    cell_style = "background:#4caf50;color:#fff;" if done else "background:#eee;color:#999;"
+                    if is_week: cell_style = "background:#ffcdd2;color:#c62828;font-weight:900;"
+                    short = val[:6] if val else "—"
+                    proc_html += (f"<span title='{name}: {val}' style='display:inline-block;"
+                                  f"border-radius:4px;padding:2px 5px;font-size:10px;margin:2px;"
+                                  f"{cell_style}'>{name[:2]}</span>")
+
+                # 備註
+                tracking = str(row.get("tracking",""))
+                tracking_html = ""
+                if tracking:
+                    hits2 = _re.findall(r"(?<![\d])(\d{1,2}/\d{1,2})(?![\d])", tracking)
+                    if any(is_this_week_str(h) for h in hits2):
+                        tracking_html = f"<div class='card-red' style='font-size:13px;margin-top:4px;'>📝 {tracking}</div>"
+                    else:
+                        tracking_html = f"<div class='card-sub'>📝 {tracking}</div>"
+
+                card = f"""
+                <div style="background:{bg_color};border-radius:10px;padding:12px 14px;
+                  margin-bottom:8px;border-left:5px solid {border_color};
+                  box-shadow:0 1px 4px rgba(0,0,0,0.1);">
+                  <div style="font-size:15px;font-weight:800;color:#0d2137;">
+                    {row.get('project_name','')}
+                  </div>
+                  <div style="font-size:12px;color:#555;margin:3px 0;">
+                    {status_icon} {status_label} &nbsp;|&nbsp; {row.get('client','')} &nbsp;|&nbsp; {row.get('case_no','')}
+                  </div>
+                  <div style="font-size:12px;color:#555;">
+                    完成率：<strong>{row.get('completion','')}</strong> &nbsp;
+                    交站：<strong>{row.get('handover','')} {row.get('handover_year','')}</strong>
+                  </div>
+                  <div style="margin-top:6px;">{proc_html}</div>
+                  {tracking_html}
+                </div>"""
+                st.markdown(card, unsafe_allow_html=True)
 
         # ── 編輯 + 勾選刪除 ──────────────────────────────────
         with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
 
-            # 準備編輯 DataFrame：加中文狀態欄 + 勾選刪除欄
+            # 準備編輯 DataFrame：清除 None 字串 + 加中文狀態欄 + 勾選刪除欄
             edit_df = df_sec[show_cols + ["status_type","id"]].copy()
+            for _c in edit_df.columns:  # 再次清除殘留 None 字串
+                edit_df[_c] = edit_df[_c].replace({"None":"","nan":"","NaN":""})
             edit_df["status_zh"] = edit_df["status_type"].map(STATUS_KEY_TO_ZH).fillna("")
             edit_df.insert(0, "🗑 刪除", False)   # 勾選欄放最前面
 
