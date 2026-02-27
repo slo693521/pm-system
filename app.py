@@ -625,13 +625,13 @@ with page_tab1:
         </table></div>"""
         st.markdown(table_html, unsafe_allow_html=True)
 
-        # ── 快速編輯單筆（所有欄位，桌機/手機通用）──────────
-        with st.expander(f"🔍 快速編輯單筆 — {sec}"):
-            if df_sec.empty:
-                st.info("此分區無資料")
-            else:
+        # ── 合併編輯區：上半單筆快速編輯 ＋ 下半大量編輯表格 ──
+        with st.expander(f"✏️ 編輯【{sec}】"):
+            # ── 上：單筆快速編輯 ──
+            st.markdown("**🔍 單筆快速編輯**")
+            if not df_sec.empty:
                 options = [f"{r['case_no']} | {r['project_name']}" for _, r in df_sec.iterrows()]
-                chosen  = st.selectbox("選擇工程案", options, key=f"qe_sel_{sec}")
+                chosen  = st.selectbox("選擇工程案", options, key=f"qe_sel_{sec}", label_visibility="collapsed")
                 chosen_idx = options.index(chosen)
                 qrow = df_sec.iloc[chosen_idx]
 
@@ -683,8 +683,8 @@ with page_tab1:
                         except Exception as e:
                             st.error(f"儲存失敗：{e}")
 
-        # ── 編輯區（表格模式大量編輯）────────────────────────
-        with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
+            st.divider()
+            st.markdown("**📋 大量編輯（改完自動儲存）**")
 
             edit_df = df_sec[[c for c in show_cols + ["status_type","id"] if c != "_order"]].copy()
             for _c in edit_df.columns:
