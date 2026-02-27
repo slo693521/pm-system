@@ -776,12 +776,20 @@ with page_tab1:
             KEYS=["status","completion","materials","case_no","project_name","client","tracking","drawing","pipe_support","welding","nde","sandblast","assembly","painting","pressure_test","handover","handover_year","contact"]
             WIDTHS=[20,11,7,22,55,13,30,13,11,18,11,11,11,11,11,15,9,13]
             PDF_BG={"in_progress":(255,255,153),"pending":(204,232,255),"not_started":(255,255,255),"suspended":(255,224,178),"completed":(240,240,240)}
-            for sec in SECTIONS:
-                ds = df_all[df_all["section"]==sec] if not df_all.empty else pd.DataFrame()
+            # 使用目前篩選後的 df（非全部）
+            sections_for_pdf = SECTIONS if filter_section=="全部分區" else [filter_section]
+            for sec in sections_for_pdf:
+                ds = df[df["section"]==sec] if not df.empty else pd.DataFrame()
                 if ds.empty: continue
+                # 篩選條件說明
+                filter_note = ""
+                if st.session_state.active_status:
+                    labels = [STATUS_CONFIG[k]["label"] for k in st.session_state.active_status if k in STATUS_CONFIG]
+                    filter_note += f"  狀態：{'、'.join(labels)}"
+                if filter_year != "全部年份": filter_note += f"  年份：{filter_year}"
                 pdf.add_page()
                 pdf.set_font("ZH", size=13); pdf.set_text_color(10,35,80)
-                pdf.cell(0,9,f"【{sec}】  ({today})  共{len(ds)}筆", new_x="LMARGIN", new_y="NEXT"); pdf.ln(1)
+                pdf.cell(0,9,f"【{sec}】  ({today})  共{len(ds)}筆{filter_note}", new_x="LMARGIN", new_y="NEXT"); pdf.ln(1)
                 pdf.set_font("ZH", size=7); pdf.set_fill_color(29,71,157); pdf.set_text_color(255,255,255)
                 for h,w in zip(HEADERS,WIDTHS): pdf.cell(w,7,h,border=1,fill=True,align="C")
                 pdf.ln(); pdf.set_font("ZH",size=6); pdf.set_text_color(30,30,30)
