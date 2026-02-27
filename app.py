@@ -857,9 +857,22 @@ with page_tab2:
             # ── 計算每筆工程的各站點天數 ──
             records = []
             for _, row in df_ana.iterrows():
-                dates = [(name, parse_date(row.get(col,""))) for col, name in STAGES]
-                dates_valid = [(n, d) for n, d in dates if d is not None]
-                if len(dates_valid) < 2: continue  # 少於兩個日期無法計算
+                # 嚴格依序解析：空白欄位保留為 None，不跳接
+                dates = []
+                for col, name in STAGES:
+                    raw = str(row.get(col,"")).strip()
+                    # 欄位空白 → 明確記為 None，不計算該段
+                    if not raw or raw in ("None","nan","-",""):
+                        dates.append((name, None))
+                    else:
+                        dates.append((name, parse_date(raw)))
+
+                # 需要至少 2 個「相鄰且都有日期」的站點才能計算
+                has_any_pair = any(
+                    dates[i][1] is not None and dates[i+1][1] is not None
+                    for i in range(len(dates)-1)
+                )
+                if not has_any_pair: continue
 
                 proj = {
                     "案號":     row.get("case_no",""),
@@ -868,18 +881,20 @@ with page_tab2:
                     "分區":     row.get("section",""),
                     "狀態":     STATUS_KEY_TO_ZH.get(row.get("status_type",""),""),
                 }
-                # 相鄰站點間隔天數
-                for i in range(len(dates_valid)-1):
-                    n1, d1 = dates_valid[i]
-                    n2, d2 = dates_valid[i+1]
+                # 只計算「相鄰且兩邊都有日期」的區段，空白欄留空不計算
+                for i in range(len(dates)-1):
+                    n1, d1 = dates[i]
+                    n2, d2 = dates[i+1]
+                    if d1 is None or d2 is None:
+                        continue   # 任一端空白 → 跳過，不填數字
                     days = (d2 - d1).days
                     if days >= 0:
                         proj[f"{n1}→{n2}"] = days
 
-                # 管撐製作到最後一個有日期的站點（總天數）
-                first_d = dates_valid[0][1]
-                last_d  = dates_valid[-1][1]
-                proj["總天數"] = (last_d - first_d).days
+                # 總天數：管撐製作到最後一個有日期的站點
+                filled_dates = [d for _, d in dates if d is not None]
+                if len(filled_dates) >= 2:
+                    proj["總天數"] = (filled_dates[-1] - filled_dates[0]).days
 
                 records.append(proj)
 
