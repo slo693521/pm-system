@@ -59,14 +59,23 @@ st.markdown("""
     font-size: 15px; font-weight: 800; margin: 12px 0 6px 0; letter-spacing: 1px;
   }
 
-  /* ══ 狀態篩選按鈕 ══ */
+  /* ══ 按鈕：強制白底深字，深色模式也清楚 ══ */
   .stButton > button {
     border-radius: 18px !important;
-    font-size: 13px !important;
+    font-size: 14px !important;
     font-weight: 700 !important;
-    min-height: 42px !important;
-    color: #111 !important;
-    padding: 4px 6px !important;
+    min-height: 44px !important;
+    padding: 4px 10px !important;
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border: 1.5px solid #999999 !important;
+  }
+  /* 選中（primary）：深藍底白字 */
+  .stButton > button[kind="primaryFormSubmit"],
+  .stButton > button[kind="primary"] {
+    background-color: #1a3a5c !important;
+    color: #ffffff !important;
+    border: none !important;
   }
 
   /* ══ 圖例列 ══ */
