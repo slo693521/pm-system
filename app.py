@@ -186,7 +186,7 @@ COL_CONFIG = {
     "painting":      st.column_config.TextColumn("噴漆"),
     "pressure_test": st.column_config.TextColumn("試壓"),
     "handover":      st.column_config.TextColumn("交站"),
-    "handover_year": st.column_config.SelectboxColumn("年份", options=["","114","115","116"]),
+    "handover_year": st.column_config.SelectboxColumn("交站年份", options=["","114","115","116"]),
     "contact":       st.column_config.TextColumn("對應窗口"),
     # ✅ 改為中文下拉選單，直接看得懂
     "status_zh":     st.column_config.SelectboxColumn(
@@ -772,7 +772,7 @@ with page_tab1:
             pdf = FPDF(orientation="L", format="A3")
             pdf.set_auto_page_break(auto=True, margin=10)
             pdf.add_font("ZH", "", font_path)
-            HEADERS=["施工順序","完成率","備料","案號","工程名稱","業主","備註","製造圖面","管撐","研磨點焊","NDE","噴砂","組立","噴漆","試壓","交站","年份","窗口"]
+            HEADERS=["施工順序","完成率","備料","案號","工程名稱","業主","備註","製造圖面","管撐","點焊","NDE","噴砂","組立","噴漆","試壓","交站","交站年份","窗口"]
             KEYS=["status","completion","materials","case_no","project_name","client","tracking","drawing","pipe_support","welding","nde","sandblast","assembly","painting","pressure_test","handover","handover_year","contact"]
             WIDTHS=[20,11,7,22,55,13,30,13,11,18,11,11,11,11,11,15,9,13]
             PDF_BG={"in_progress":(255,255,153),"pending":(204,232,255),"not_started":(255,255,255),"suspended":(255,224,178),"completed":(240,240,240)}
@@ -840,8 +840,6 @@ with page_tab2:
             STAGES = [
                 ("pipe_support", "管撐製作"),
                 ("welding",      "點焊"),
-                ("nde",          "焊道NDE"),
-                ("sandblast",    "噴砂"),
                 ("assembly",     "組立"),
                 ("painting",     "噴漆"),
                 ("pressure_test","試壓"),
