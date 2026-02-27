@@ -837,14 +837,18 @@ with page_tab2:
             st.info("此條件下沒有資料")
         else:
             # ── 工序定義（從管撐製作開始）──
-            STAGES = [
-                ("pipe_support", "管撐製作"),
-                ("welding",      "點焊"),
-                ("assembly",     "組立"),
-                ("painting",     "噴漆"),
-                ("pressure_test","試壓"),
-                ("handover",     "交站"),
+            # 明確定義要計算的站點配對（不在此清單的相鄰段不計算）
+            CALC_PAIRS = [
+                ("pipe_support", "welding",       "管撐製作→點焊"),
+                ("welding",      "nde",            "點焊→焊道NDT"),
+                ("assembly",     "painting",       "組立→噴漆"),
+                ("painting",     "pressure_test",  "噴漆→試壓"),
+                ("pressure_test","handover",       "試壓→交站"),
             ]
+            # 所有用到的欄位（供解析日期用）
+            ALL_COLS = list(dict.fromkeys(
+                [c for c,_,_ in CALC_PAIRS] + [c2 for _,c2,_ in CALC_PAIRS]
+            ))
 
             def parse_date(val: str):
                 """解析 M/D 或 YYYY-MM-DD，補上當年年份"""
@@ -863,23 +867,13 @@ with page_tab2:
             # ── 計算每筆工程的各站點天數 ──
             records = []
             for _, row in df_ana.iterrows():
-                # 嚴格依序解析：空白欄位保留為 None，不跳接
-                dates = []
-                for col, name in STAGES:
+                # 解析所有需要的欄位日期
+                col_dates = {}
+                for col in ALL_COLS:
                     raw = str(row.get(col,"")).strip()
-                    # 欄位空白 → 明確記為 None，不計算該段
-                    if not raw or raw in ("None","nan","-",""):
-                        dates.append((name, None))
-                    else:
-                        dates.append((name, parse_date(raw)))
+                    col_dates[col] = parse_date(raw) if raw and raw not in ("None","nan","-","") else None
 
-                # 需要至少 2 個「相鄰且都有日期」的站點才能計算
-                has_any_pair = any(
-                    dates[i][1] is not None and dates[i+1][1] is not None
-                    for i in range(len(dates)-1)
-                )
-                if not has_any_pair: continue
-
+                # 只計算 CALC_PAIRS 中定義的配對，任一端空白就跳過
                 proj = {
                     "案號":     row.get("case_no",""),
                     "工程名稱": row.get("project_name",""),
@@ -887,20 +881,23 @@ with page_tab2:
                     "分區":     row.get("section",""),
                     "狀態":     STATUS_KEY_TO_ZH.get(row.get("status_type",""),""),
                 }
-                # 只計算「相鄰且兩邊都有日期」的區段，空白欄留空不計算
-                for i in range(len(dates)-1):
-                    n1, d1 = dates[i]
-                    n2, d2 = dates[i+1]
+                has_any = False
+                for c1, c2, label in CALC_PAIRS:
+                    d1 = col_dates.get(c1)
+                    d2 = col_dates.get(c2)
                     if d1 is None or d2 is None:
-                        continue   # 任一端空白 → 跳過，不填數字
+                        continue   # 任一端空白 → 不計算
                     days = (d2 - d1).days
                     if days >= 0:
-                        proj[f"{n1}→{n2}"] = days
+                        proj[label] = days
+                        has_any = True
 
-                # 總天數：管撐製作到最後一個有日期的站點
-                filled_dates = [d for _, d in dates if d is not None]
-                if len(filled_dates) >= 2:
-                    proj["總天數"] = (filled_dates[-1] - filled_dates[0]).days
+                if not has_any: continue  # 沒有任何可計算的對
+
+                # 總天數：管撐製作到最後一個有日期的欄位
+                all_filled = [d for d in col_dates.values() if d is not None]
+                if len(all_filled) >= 2:
+                    proj["總天數"] = (max(all_filled) - min(all_filled)).days
 
                 records.append(proj)
 
