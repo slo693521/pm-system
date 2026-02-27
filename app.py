@@ -598,8 +598,15 @@ with page_tab1:
                 bg = STATUS_CONFIG.get(st_key,{}).get("bg","#ffffff")
                 upd = str(row.get("updated_at",""))
                 cells = ""
+                _HTML_DATE_COLS = {"drawing","pipe_support","welding","nde","sandblast",
+                                   "assembly","painting","pressure_test","handover"}
                 for c in disp_cols:
                     val = str(row.get(c,""))
+                    # ── 日期欄：YYYY/MM/DD → 短日期 M/D 顯示 ──
+                    if c in _HTML_DATE_COLS:
+                        m_long = _re2.search(r"\d{4}/(\d{1,2})/(\d{1,2})", val)
+                        if m_long:
+                            val = f"{int(m_long.group(1))}/{int(m_long.group(2))}"
                     # 偵測本週日期 → 紅字
                     date_hits = _re2.findall(
                         r"(?<!\d)(\d{1,2}/\d{1,2})(?!\d)|(\d{4}-\d{2}-\d{2})", val)
