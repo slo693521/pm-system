@@ -567,63 +567,63 @@ with page_tab1:
             if extra in df_sec.columns and extra not in styled_df.columns:
                 styled_df[extra] = df_sec[extra].values
 
-            # ── HTML 表格：完全鎖死排序，顏色/紅字完整保留 ──
-            import re as _re2
-            COL_DISPLAY_NAMES = {
-                "status":"施工順序","completion":"完成率","materials":"備料",
-                "case_no":"案號","project_name":"工程名稱","client":"業主",
-                "tracking":"備註","drawing":"製造圖面","pipe_support":"管撐製作",
-                "welding":"點焊","nde":"焊道NDE","sandblast":"噴砂",
-                "assembly":"組立*","painting":"噴漆","pressure_test":"試壓",
-                "handover":"交站","handover_year":"年份","contact":"對應窗口",
-            }
-            disp_cols = [c for c in DISPLAY_COLS if c in df_sec.columns]
+        # ── HTML 表格：完全鎖死排序，顏色/紅字完整保留 ──
+        import re as _re2
+        COL_DISPLAY_NAMES = {
+            "status":"施工順序","completion":"完成率","materials":"備料",
+            "case_no":"案號","project_name":"工程名稱","client":"業主",
+            "tracking":"備註","drawing":"製造圖面","pipe_support":"管撐製作",
+            "welding":"點焊","nde":"焊道NDE","sandblast":"噴砂",
+            "assembly":"組立*","painting":"噴漆","pressure_test":"試壓",
+            "handover":"交站","handover_year":"年份","contact":"對應窗口",
+        }
+        disp_cols = [c for c in DISPLAY_COLS if c in df_sec.columns]
 
-            # 表頭
-            th_html = "".join(
-                f'<th style="background:#1a3a5c;color:#fff;padding:6px 8px;'
-                f'white-space:nowrap;font-size:12px;border:1px solid #2a5080;">'
-                f'{COL_DISPLAY_NAMES.get(c,c)}</th>'
-                for c in disp_cols
-            )
-            # 表身
-            rows_html = ""
-            for _, row in df_sec.iterrows():
-                st_key = str(row.get("status_type",""))
-                bg = STATUS_CONFIG.get(st_key,{}).get("bg","#ffffff")
-                upd = str(row.get("updated_at",""))
-                cells = ""
-                _HTML_DATE_COLS = {"drawing","pipe_support","welding","nde","sandblast",
-                                   "assembly","painting","pressure_test","handover"}
-                for c in disp_cols:
-                    val = str(row.get(c,""))
-                    # ── 日期欄：YYYY/MM/DD → 短日期 M/D 顯示 ──
-                    if c in _HTML_DATE_COLS:
-                        m_long = _re2.search(r"\d{4}/(\d{1,2})/(\d{1,2})", val)
-                        if m_long:
-                            val = f"{int(m_long.group(1))}/{int(m_long.group(2))}"
-                    # 偵測本週日期 → 紅字
-                    date_hits = _re2.findall(
-                        r"(?<!\d)(\d{1,2}/\d{1,2})(?!\d)|(\d{4}-\d{2}-\d{2})", val)
-                    cell_style = f"background:{bg};padding:5px 7px;font-size:12px;border:1px solid #ddd;white-space:nowrap;color:#111;"
-                    cell_val = val
-                    for grp in date_hits:
-                        raw = grp[0] or grp[1]
-                        if is_this_week_str(raw):
-                            cell_val = val.replace(
-                                raw,
-                                f'<span style="color:#c62828;font-weight:900">{raw}</span>')
-                            break
-                    cells += f'<td style="{cell_style}">{cell_val}</td>'
-                rows_html += f"<tr>{cells}</tr>"
+        # 表頭
+        th_html = "".join(
+            f'<th style="background:#1a3a5c;color:#fff;padding:6px 8px;'
+            f'white-space:nowrap;font-size:12px;border:1px solid #2a5080;">'
+            f'{COL_DISPLAY_NAMES.get(c,c)}</th>'
+            for c in disp_cols
+        )
+        # 表身
+        rows_html = ""
+        for _, row in df_sec.iterrows():
+            st_key = str(row.get("status_type",""))
+            bg = STATUS_CONFIG.get(st_key,{}).get("bg","#ffffff")
+            upd = str(row.get("updated_at",""))
+            cells = ""
+            _HTML_DATE_COLS = {"drawing","pipe_support","welding","nde","sandblast",
+                               "assembly","painting","pressure_test","handover"}
+            for c in disp_cols:
+                val = str(row.get(c,""))
+                # ── 日期欄：YYYY/MM/DD → 短日期 M/D 顯示 ──
+                if c in _HTML_DATE_COLS:
+                    m_long = _re2.search(r"\d{4}/(\d{1,2})/(\d{1,2})", val)
+                    if m_long:
+                        val = f"{int(m_long.group(1))}/{int(m_long.group(2))}"
+                # 偵測本週日期 → 紅字
+                date_hits = _re2.findall(
+                    r"(?<!\d)(\d{1,2}/\d{1,2})(?!\d)|(\d{4}-\d{2}-\d{2})", val)
+                cell_style = f"background:{bg};padding:5px 7px;font-size:12px;border:1px solid #ddd;white-space:nowrap;color:#111;"
+                cell_val = val
+                for grp in date_hits:
+                    raw = grp[0] or grp[1]
+                    if is_this_week_str(raw):
+                        cell_val = val.replace(
+                            raw,
+                            f'<span style="color:#c62828;font-weight:900">{raw}</span>')
+                        break
+                cells += f'<td style="{cell_style}">{cell_val}</td>'
+            rows_html += f"<tr>{cells}</tr>"
 
-            table_html = f"""
-            <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
-            <table style="border-collapse:collapse;width:100%;font-family:sans-serif;">
-              <thead><tr>{th_html}</tr></thead>
-              <tbody>{rows_html}</tbody>
-            </table></div>"""
-            st.markdown(table_html, unsafe_allow_html=True)
+        table_html = f"""
+        <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+        <table style="border-collapse:collapse;width:100%;font-family:sans-serif;">
+          <thead><tr>{th_html}</tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table></div>"""
+        st.markdown(table_html, unsafe_allow_html=True)
 
         # ── 快速編輯單筆（所有欄位，桌機/手機通用）──────────
         with st.expander(f"🔍 快速編輯單筆 — {sec}"):
