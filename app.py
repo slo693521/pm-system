@@ -405,7 +405,7 @@ if not df_all.empty:
     st.markdown(cards_html, unsafe_allow_html=True)
 
 st.divider()
-page_tab1, page_tab2, page_tab3 = st.tabs(["📋 進度管理", "📊 工時分析", "📌 看板"])
+page_tab1, page_tab2 = st.tabs(["📋 進度管理", "📊 工時分析"])
 
 # ═══════════════════════════════════════════════════════
 # PAGE 1：進度管理
@@ -1207,91 +1207,3 @@ with page_tab2:
                         st.dataframe(bot3, use_container_width=True, hide_index=True)
 
 # ═══════════════════════════════════════════════════════
-# PAGE 3：看板
-# ═══════════════════════════════════════════════════════
-with page_tab3:
-    if df_all.empty:
-        st.warning("尚無資料")
-    else:
-        st.markdown("### 📌 工程進度看板")
-
-        # ── 篩選列 ──
-        kb1, kb2 = st.columns([2, 2])
-        with kb1:
-            kb_sec = st.selectbox("分區", ["全部"]+SECTIONS, key="kb_sec")
-        with kb2:
-            kb_search = st.text_input("🔍 搜尋案號/工程名稱", key="kb_search", label_visibility="collapsed",
-                                      placeholder="搜尋案號/工程名稱")
-
-        df_kb = df_all.copy()
-        if kb_sec != "全部":
-            df_kb = df_kb[df_kb["section"] == kb_sec]
-        if kb_search.strip():
-            mask = (df_kb["case_no"].str.contains(kb_search, case=False, na=False) |
-                    df_kb["project_name"].str.contains(kb_search, case=False, na=False))
-            df_kb = df_kb[mask]
-
-        # ── 看板欄位定義：依狀態分欄 ──
-        KANBAN_COLS = [
-            ("not_started", "⏳ 未開始", "#FAFAFA", "#90a4ae"),
-            ("in_progress", "⚙ 製作中",  "#FFFDE7", "#e6c800"),
-            ("pending",     "📦 待交站", "#E3F2FD", "#2196f3"),
-        ]
-
-        cols = st.columns(len(KANBAN_COLS))
-
-        for col_ui, (st_key, st_label, col_bg, col_border) in zip(cols, KANBAN_COLS):
-            group = df_kb[df_kb["status_type"] == st_key]
-            with col_ui:
-                # 欄標題
-                st.markdown(
-                    f'''<div style="background:{col_border};color:#fff;text-align:center;
-                    padding:8px 4px;border-radius:8px 8px 0 0;font-weight:800;
-                    font-size:14px;margin-bottom:6px;">
-                    {st_label}<br><span style="font-size:11px;opacity:.85;">{len(group)} 筆</span>
-                    </div>''', unsafe_allow_html=True)
-
-                if group.empty:
-                    st.markdown(
-                        '<div style="background:#f9f9f9;border:2px dashed #ddd;border-radius:8px;'                        'padding:20px;text-align:center;color:#bbb;font-size:13px;">暫無</div>',
-                        unsafe_allow_html=True)
-                else:
-                    import re as _kb_re
-                    for _, row in group.iterrows():
-                        # 工序格子
-                        proc_dots = ""
-                        for p_col, p_name in zip(PROCESS_COLS, PROCESS_NAMES):
-                            val = str(row.get(p_col,"")).strip()
-                            done = val and val not in ("None","nan","-")
-                            is_wk = False
-                            for h in _kb_re.findall(r"(\d{1,2}/\d{1,2})", val):
-                                if is_this_week_str(h): is_wk = True; break
-                            dot_bg = "#e53935" if is_wk else "#43a047" if done else "#e0e0e0"
-                            dot_color = "#fff" if (done or is_wk) else "#aaa"
-                            proc_dots += (f'<span title="{p_name}: {val}" style="display:inline-block;'                                f'width:22px;height:22px;line-height:22px;border-radius:50%;'                                f'background:{dot_bg};color:{dot_color};font-size:9px;'                                f'text-align:center;margin:1px;">{p_name[:1]}</span>')
-
-                        # 交站日期
-                        handover_str = str(row.get("handover",""))
-                        if handover_str:
-                            m_h = _kb_re.search(r"\d{4}/(\d{1,2})/(\d{1,2})", handover_str)
-                            if m_h: handover_str = f"{int(m_h.group(1))}/{int(m_h.group(2))}"
-
-                        client = str(row.get("client",""))
-
-                        card_html = f'''
-                        <div style="background:{col_bg};border:1px solid {col_border};
-                             border-left:4px solid {col_border};border-radius:8px;
-                             padding:10px 10px 8px;margin-bottom:8px;
-                             box-shadow:0 1px 3px rgba(0,0,0,.08);">
-                          <div style="font-size:12px;font-weight:800;color:#0d2137;line-height:1.3;">
-                            {row.get("case_no","")}
-                          </div>
-                          <div style="font-size:11px;color:#333;margin:2px 0 4px;">
-                            {row.get("project_name","")}
-                          </div>
-                          <div style="font-size:10px;color:#666;margin-bottom:6px;">
-                            🏢 {client}{("&nbsp;&nbsp;🗓 "+handover_str) if handover_str else ""}
-                          </div>
-                          <div>{proc_dots}</div>
-                        </div>'''
-                        st.markdown(card_html, unsafe_allow_html=True)
