@@ -177,15 +177,15 @@ COL_CONFIG = {
     "project_name":  st.column_config.TextColumn("工程名稱", width="large"),
     "client":        st.column_config.TextColumn("業主"),
     "tracking":      st.column_config.TextColumn("備註", width="medium"),
-    "drawing":       st.column_config.TextColumn("製造圖面"),
-    "pipe_support":  st.column_config.TextColumn("管撐製作"),
-    "welding":       st.column_config.TextColumn("點焊"),
-    "nde":           st.column_config.TextColumn("焊道NDE"),
-    "sandblast":     st.column_config.TextColumn("噴砂"),
-    "assembly":      st.column_config.TextColumn("組立*"),
-    "painting":      st.column_config.TextColumn("噴漆"),
-    "pressure_test": st.column_config.TextColumn("試壓"),
-    "handover":      st.column_config.TextColumn("交站"),
+    "drawing":       st.column_config.DateColumn("製造圖面",  format="MM/DD"),
+    "pipe_support":  st.column_config.DateColumn("管撐製作",  format="MM/DD"),
+    "welding":       st.column_config.DateColumn("點焊",      format="MM/DD"),
+    "nde":           st.column_config.DateColumn("焊道NDE",   format="MM/DD"),
+    "sandblast":     st.column_config.DateColumn("噴砂",      format="MM/DD"),
+    "assembly":      st.column_config.DateColumn("組立*",     format="MM/DD"),
+    "painting":      st.column_config.DateColumn("噴漆",      format="MM/DD"),
+    "pressure_test": st.column_config.DateColumn("試壓",      format="MM/DD"),
+    "handover":      st.column_config.DateColumn("交站",      format="MM/DD"),
     "handover_year": st.column_config.SelectboxColumn("交站年份", options=["","114","115","116"]),
     "contact":       st.column_config.TextColumn("對應窗口"),
     # ✅ 改為中文下拉選單，直接看得懂
@@ -247,8 +247,14 @@ def do_save(sec: str, original_df: pd.DataFrame, editor_state) -> int:
     NON_DB_COLS = {"🗑 刪除", "status_zh", "_order"}
 
     def clean_val(v) -> str:
-        """任何值轉乾淨字串，None/nan → 空字串"""
+        """任何值轉乾淨字串，None/nan → 空字串；date物件 → YYYY/MM/DD"""
         if v is None: return ""
+        # date/datetime 物件 → 短日期字串
+        try:
+            from datetime import date as _date, datetime as _dt
+            if isinstance(v, (_date, _dt)):
+                return v.strftime("%Y/%m/%d")  # 存到 DB 保留完整年份，顯示由 DateColumn format 控制
+        except: pass
         if not isinstance(v, str):
             try:
                 if pd.isna(v): return ""
@@ -672,7 +678,133 @@ with page_tab1:
                 </div>"""
                 st.markdown(card, unsafe_allow_html=True)
 
-        # ── 編輯區 ────────────────────────────────────────────
+                # ── 卡片快速編輯按鈕 ──
+                edit_key_card = f"quick_edit_{row.get('id','')}"
+                if st.button(f"✏️ 編輯", key=f"btn_{edit_key_card}", use_container_width=True):
+                    # toggle
+                    cur = st.session_state.get(edit_key_card, False)
+                    st.session_state[edit_key_card] = not cur
+
+                if st.session_state.get(edit_key_card, False):
+                    with st.form(key=f"form_{edit_key_card}"):
+                        st.markdown(f"**✏️ 編輯：{row.get('project_name','')}**")
+                        fa1, fa2, fa3 = st.columns(3)
+                        with fa1:
+                            f_case_no      = st.text_input("案號",      value=str(row.get("case_no","")))
+                            f_project_name = st.text_input("工程名稱",  value=str(row.get("project_name","")))
+                            f_client       = st.text_input("業主",      value=str(row.get("client","")))
+                            f_contact      = st.text_input("對應窗口",  value=str(row.get("contact","")))
+                        with fa2:
+                            f_status_zh  = st.selectbox("狀態", STATUS_ZH_OPTIONS,
+                                index=STATUS_ZH_OPTIONS.index(STATUS_KEY_TO_ZH.get(str(row.get("status_type","")),"")))
+                            f_status     = st.text_input("施工順序",   value=str(row.get("status","")))
+                            f_completion = st.text_input("完成率",     value=str(row.get("completion","")))
+                            f_materials  = st.text_input("備料",       value=str(row.get("materials","")))
+                            f_tracking   = st.text_area("備註",        value=str(row.get("tracking","")), height=80)
+                        with fa3:
+                            f_pipe_support  = st.text_input("管撐製作",  value=str(row.get("pipe_support","")))
+                            f_welding       = st.text_input("點焊",      value=str(row.get("welding","")))
+                            f_nde           = st.text_input("焊道NDE",   value=str(row.get("nde","")))
+                            f_sandblast     = st.text_input("噴砂",      value=str(row.get("sandblast","")))
+                            f_assembly      = st.text_input("組立",      value=str(row.get("assembly","")))
+                            f_painting      = st.text_input("噴漆",      value=str(row.get("painting","")))
+                            f_pressure_test = st.text_input("試壓",      value=str(row.get("pressure_test","")))
+                            f_handover      = st.text_input("交站",      value=str(row.get("handover","")))
+                            f_handover_year = st.selectbox("交站年份",   ["","114","115","116"],
+                                index=["","114","115","116"].index(str(row.get("handover_year","")) if str(row.get("handover_year","")) in ["","114","115","116"] else ""))
+
+                        sb1, sb2 = st.columns(2)
+                        with sb1: submitted = st.form_submit_button("💾 儲存", type="primary", use_container_width=True)
+                        with sb2: cancelled = st.form_submit_button("✖ 取消", use_container_width=True)
+
+                        if submitted:
+                            rid = str(row.get("id",""))
+                            new_status_type = STATUS_ZH_TO_KEY.get(f_status_zh, "not_started")
+                            upd = {
+                                "case_no": f_case_no, "project_name": f_project_name,
+                                "client": f_client, "contact": f_contact,
+                                "status": f_status, "completion": f_completion,
+                                "materials": f_materials, "tracking": f_tracking,
+                                "pipe_support": f_pipe_support, "welding": f_welding,
+                                "nde": f_nde, "sandblast": f_sandblast,
+                                "assembly": f_assembly, "painting": f_painting,
+                                "pressure_test": f_pressure_test, "handover": f_handover,
+                                "handover_year": f_handover_year,
+                                "status_type": new_status_type,
+                                "section": sec,
+                                "updated_at": datetime.now().isoformat(),
+                            }
+                            try:
+                                supabase.table("projects").update(upd).eq("id", rid).execute()
+                                st.success("✅ 已儲存！")
+                                st.session_state[edit_key_card] = False
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"儲存失敗：{e}")
+                        if cancelled:
+                            st.session_state[edit_key_card] = False
+                            st.rerun()
+
+        # ── 快速編輯單筆（所有欄位，桌機/手機通用）──────────
+        with st.expander(f"🔍 快速編輯單筆 — {sec}"):
+            if df_sec.empty:
+                st.info("此分區無資料")
+            else:
+                options = [f"{r['case_no']} | {r['project_name']}" for _, r in df_sec.iterrows()]
+                chosen  = st.selectbox("選擇工程案", options, key=f"qe_sel_{sec}")
+                chosen_idx = options.index(chosen)
+                qrow = df_sec.iloc[chosen_idx]
+
+                with st.form(key=f"qe_form_{sec}"):
+                    qc1, qc2, qc3 = st.columns(3)
+                    with qc1:
+                        q_case_no      = st.text_input("案號",     value=str(qrow.get("case_no","")))
+                        q_project_name = st.text_input("工程名稱", value=str(qrow.get("project_name","")))
+                        q_client       = st.text_input("業主",     value=str(qrow.get("client","")))
+                        q_contact      = st.text_input("對應窗口", value=str(qrow.get("contact","")))
+                        q_status       = st.text_input("施工順序", value=str(qrow.get("status","")))
+                        q_completion   = st.text_input("完成率",   value=str(qrow.get("completion","")))
+                        q_materials    = st.text_input("備料",     value=str(qrow.get("materials","")))
+                        q_tracking     = st.text_area("備註",      value=str(qrow.get("tracking","")), height=80)
+                    with qc2:
+                        q_status_zh = st.selectbox("狀態", STATUS_ZH_OPTIONS,
+                            index=STATUS_ZH_OPTIONS.index(STATUS_KEY_TO_ZH.get(str(qrow.get("status_type","")),"")))
+                        q_drawing       = st.text_input("製造圖面", value=str(qrow.get("drawing","")))
+                        q_pipe_support  = st.text_input("管撐製作", value=str(qrow.get("pipe_support","")))
+                        q_welding       = st.text_input("點焊",     value=str(qrow.get("welding","")))
+                        q_nde           = st.text_input("焊道NDE",  value=str(qrow.get("nde","")))
+                    with qc3:
+                        q_sandblast     = st.text_input("噴砂",     value=str(qrow.get("sandblast","")))
+                        q_assembly      = st.text_input("組立",     value=str(qrow.get("assembly","")))
+                        q_painting      = st.text_input("噴漆",     value=str(qrow.get("painting","")))
+                        q_pressure_test = st.text_input("試壓",     value=str(qrow.get("pressure_test","")))
+                        q_handover      = st.text_input("交站",     value=str(qrow.get("handover","")))
+                        q_handover_year = st.selectbox("交站年份",  ["","114","115","116"],
+                            index=["","114","115","116"].index(str(qrow.get("handover_year","")) if str(qrow.get("handover_year","")) in ["","114","115","116"] else ""))
+
+                    if st.form_submit_button("💾 儲存此筆", type="primary", use_container_width=True):
+                        rid = str(qrow.get("id",""))
+                        new_st = STATUS_ZH_TO_KEY.get(q_status_zh, "not_started")
+                        upd = {
+                            "case_no":q_case_no,"project_name":q_project_name,"client":q_client,
+                            "contact":q_contact,"status":q_status,"completion":q_completion,
+                            "materials":q_materials,"tracking":q_tracking,"status_type":new_st,
+                            "drawing":q_drawing,"pipe_support":q_pipe_support,"welding":q_welding,
+                            "nde":q_nde,"sandblast":q_sandblast,"assembly":q_assembly,
+                            "painting":q_painting,"pressure_test":q_pressure_test,
+                            "handover":q_handover,"handover_year":q_handover_year,
+                            "section":sec,"updated_at":datetime.now().isoformat(),
+                        }
+                        try:
+                            supabase.table("projects").update(upd).eq("id",rid).execute()
+                            st.success(f"✅ 已儲存「{q_project_name}」！")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"儲存失敗：{e}")
+
+        # ── 編輯區（表格模式大量編輯）────────────────────────
         with st.expander(f"✏️ 編輯【{sec}】（改完自動儲存）"):
 
             edit_df = df_sec[[c for c in show_cols + ["status_type","id"] if c != "_order"]].copy()
@@ -680,6 +812,37 @@ with page_tab1:
                 edit_df[_c] = edit_df[_c].replace({"None":"","nan":"","NaN":""})
             edit_df["status_zh"] = edit_df["status_type"].map(STATUS_KEY_TO_ZH).fillna("")
             edit_df.insert(0, "🗑 刪除", False)   # 勾選欄放最前面
+
+            # ── 文字日期 → Python date 物件（DateColumn 需要）──
+            _DATE_COLS = ["drawing","pipe_support","welding","nde","sandblast",
+                          "assembly","painting","pressure_test","handover"]
+            def _str_to_date(val):
+                import re as _r
+                v = str(val).strip()
+                if not v or v in ("None","nan","NaN","","-"): return None
+                # M/D 格式，跨年判斷
+                m = _r.search(r"(\d{1,2})/(\d{1,2})", v)
+                if m:
+                    now = datetime.now()
+                    mo, day = int(m.group(1)), int(m.group(2))
+                    year = now.year
+                    if mo > now.month or (mo == now.month and day > now.day):
+                        year -= 1
+                    try:
+                        from datetime import date as _date
+                        return _date(year, mo, day)
+                    except: pass
+                # YYYY/MM/DD 或 YYYY-MM-DD
+                try:
+                    dt = pd.to_datetime(v, errors="coerce")
+                    if pd.notna(dt):
+                        return dt.date()
+                except: pass
+                return None
+
+            for _dc in _DATE_COLS:
+                if _dc in edit_df.columns:
+                    edit_df[_dc] = edit_df[_dc].apply(_str_to_date)
 
             original_df = edit_df.copy()
             edit_key    = f"edit_{sec}"
@@ -743,13 +906,89 @@ with page_tab1:
 
     # ── 重新整理按鈕 ──────────────────────────────────────
     st.divider()
-    c1,c2,_ = st.columns([1,1,4])
+    c1,c2,c3,_ = st.columns([1,1,1,2])
     with c1:
-        if st.button("🔄 重新整理（更新顏色）", use_container_width=True, type="primary"):
+        if st.button("🔄 重新整理", use_container_width=True, type="primary"):
             refresh()
     with c2:
         if st.button("📄 匯出 PDF", use_container_width=True):
             st.session_state["show_pdf"] = True
+    with c3:
+        if st.button("📊 匯出 Excel", use_container_width=True):
+            st.session_state["show_xlsx"] = True
+
+    # ── 匯出 xlsx ──────────────────────────────────────
+    if st.session_state.get("show_xlsx"):
+        try:
+            import openpyxl
+            from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+            from io import BytesIO
+
+            wb  = openpyxl.Workbook()
+            wb.remove(wb.active)
+
+            XLSX_COL_NAMES = {
+                "status":"施工順序","completion":"完成率","materials":"備料",
+                "case_no":"案號","project_name":"工程名稱","client":"業主",
+                "tracking":"備註","drawing":"製造圖面","pipe_support":"管撐製作",
+                "welding":"點焊","nde":"焊道NDE","sandblast":"噴砂",
+                "assembly":"組立","painting":"噴漆","pressure_test":"試壓",
+                "handover":"交站","handover_year":"交站年份","contact":"對應窗口",
+            }
+            XLSX_BG = {
+                "in_progress":"FFFF99","pending":"CCE8FF",
+                "not_started":"FFFFFF","suspended":"FFE0B2","completed":"F0F0F0"
+            }
+            thin = Side(style="thin", color="AAAAAA")
+            border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+            export_cols = [c for c in DISPLAY_COLS if c in df.columns]
+            sections_xlsx = SECTIONS if filter_section=="全部分區" else [filter_section]
+
+            for sec_x in sections_xlsx:
+                ds = df[df["section"]==sec_x] if not df.empty else pd.DataFrame()
+                if ds.empty: continue
+                ws = wb.create_sheet(title=sec_x[:31])
+
+                # 標題列
+                for ci, col in enumerate(export_cols, 1):
+                    cell = ws.cell(row=1, column=ci, value=XLSX_COL_NAMES.get(col,col))
+                    cell.font      = Font(bold=True, color="FFFFFF", name="Arial")
+                    cell.fill      = PatternFill("solid", fgColor="1A3A5C")
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    cell.border    = border
+
+                # 資料列
+                for ri, (_, row) in enumerate(ds.iterrows(), 2):
+                    bg = XLSX_BG.get(str(row.get("status_type","")), "FFFFFF")
+                    fill = PatternFill("solid", fgColor=bg)
+                    for ci, col in enumerate(export_cols, 1):
+                        val = str(row.get(col,"") or "")
+                        cell = ws.cell(row=ri, column=ci, value=val)
+                        cell.fill      = fill
+                        cell.font      = Font(name="Arial", size=10)
+                        cell.alignment = Alignment(vertical="center", wrap_text=False)
+                        cell.border    = border
+
+                # 欄寬
+                col_widths = {"project_name":35,"tracking":30,"case_no":14,"client":12,
+                              "contact":12,"status":14,"completion":8,"materials":8}
+                for ci, col in enumerate(export_cols, 1):
+                    ws.column_dimensions[openpyxl.utils.get_column_letter(ci)].width = col_widths.get(col, 12)
+                ws.row_dimensions[1].height = 18
+                ws.freeze_panes = "A2"
+
+            buf = BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            fname_x = f"工程進度_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            st.download_button("⬇ 下載 Excel", buf.getvalue(),
+                               file_name=fname_x,
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.session_state["show_xlsx"] = False
+        except Exception as e:
+            st.error(f"Excel 匯出失敗：{e}")
+
 
     if st.session_state.get("show_pdf"):
         try:
@@ -851,15 +1090,24 @@ with page_tab2:
             ))
 
             def parse_date(val: str):
-                """解析 M/D 或 YYYY-MM-DD，補上當年年份"""
+                """解析 M/D 或 YYYY-MM-DD
+                跨年判斷：月份 > 當前月份 → 補上一年（例如現在2月，12/23 → 2025/12/23）
+                """
                 import re as _r
                 val = str(val).strip()
                 if not val or val in ("None","nan","-",""): return None
-                # 取第一個日期片段（欄位可能有備注文字）
                 m = _r.search(r"(\d{1,2})/(\d{1,2})", val)
                 if m:
-                    year = datetime.now().year
-                    try: return datetime(year, int(m.group(1)), int(m.group(2)))
+                    now = datetime.now()
+                    mo, day = int(m.group(1)), int(m.group(2))
+                    year = now.year
+                    # 月份大於當前月份 → 應該是去年
+                    if mo > now.month:
+                        year -= 1
+                    # 月份等於當前月份但日期大於今天 → 也是去年
+                    elif mo == now.month and day > now.day:
+                        year -= 1
+                    try: return datetime(year, mo, day)
                     except: pass
                 try: return pd.to_datetime(val, errors="coerce").to_pydatetime()
                 except: return None
