@@ -405,7 +405,7 @@ if not df_all.empty:
     st.markdown(cards_html, unsafe_allow_html=True)
 
 st.divider()
-page_tab1, page_tab2, page_tab3 = st.tabs(["📋 進度管理", "📊 工時分析", "⏱ 生產工時儀表板"])
+page_tab1, page_tab2, page_tab3 = st.tabs(["📋 進度管理", "📊 工時分析", "📌 看板"])
 
 # ═══════════════════════════════════════════════════════
 # PAGE 1：進度管理
@@ -1207,126 +1207,91 @@ with page_tab2:
                         st.dataframe(bot3, use_container_width=True, hide_index=True)
 
 # ═══════════════════════════════════════════════════════
-# PAGE 3：生產工時儀表板
+# PAGE 3：看板
 # ═══════════════════════════════════════════════════════
 with page_tab3:
-    try:
-        import plotly.express as px
-        import plotly.graph_objects as go
-        PLOTLY_OK = True
-    except ImportError:
-        PLOTLY_OK = False
-        st.error("請在 requirements.txt 加入 plotly，重新部署後再使用。")
+    if df_all.empty:
+        st.warning("尚無資料")
+    else:
+        st.markdown("### 📌 工程進度看板")
 
-    if PLOTLY_OK:
-        FONT = "Microsoft JhengHei, PingFang TC, Heiti TC, sans-serif"
-        def apply_font(fig):
-            fig.update_layout(font=dict(family=FONT,size=13),title_font=dict(family=FONT,size=15),
-                              legend=dict(font=dict(family=FONT)),paper_bgcolor="white",plot_bgcolor="#f8faff")
-            return fig
+        # ── 篩選列 ──
+        kb1, kb2 = st.columns([2, 2])
+        with kb1:
+            kb_sec = st.selectbox("分區", ["全部"]+SECTIONS, key="kb_sec")
+        with kb2:
+            kb_search = st.text_input("🔍 搜尋案號/工程名稱", key="kb_search", label_visibility="collapsed",
+                                      placeholder="搜尋案號/工程名稱")
 
-        @st.cache_data(ttl=30)
-        def load_work_logs() -> pd.DataFrame:
-            try:
-                res = supabase.table("work_logs").select("*").order("start_time",desc=True).execute()
-                if not res.data: return pd.DataFrame()
-                df = pd.DataFrame(res.data)
-                df["start_time"]     = pd.to_datetime(df["start_time"],  errors="coerce")
-                df["end_time"]       = pd.to_datetime(df["end_time"],    errors="coerce")
-                df["actual_hours"]   = pd.to_numeric(df["actual_hours"],   errors="coerce")
-                df["standard_hours"] = pd.to_numeric(df["standard_hours"], errors="coerce")
-                return df.dropna(subset=["start_time"])
-            except: return pd.DataFrame()
+        df_kb = df_all.copy()
+        if kb_sec != "全部":
+            df_kb = df_kb[df_kb["section"] == kb_sec]
+        if kb_search.strip():
+            mask = (df_kb["case_no"].str.contains(kb_search, case=False, na=False) |
+                    df_kb["project_name"].str.contains(kb_search, case=False, na=False))
+            df_kb = df_kb[mask]
 
-        st.markdown("""
-        <div style="background:linear-gradient(135deg,#0a2540,#1a6b3c);
-          padding:12px 20px;border-radius:8px;margin-bottom:14px;">
-          <div style="color:#fff;font-size:18px;font-weight:900;letter-spacing:2px;">⏱ 生產工時分析儀表板</div>
-          <div style="color:#a8d5b5;font-size:12px;margin-top:3px;">資料來源：work_logs 資料表 ／ 即時同步</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # ── 看板欄位定義：依狀態分欄 ──
+        KANBAN_COLS = [
+            ("not_started", "⏳ 未開始", "#FAFAFA", "#90a4ae"),
+            ("in_progress", "⚙ 製作中",  "#FFFDE7", "#e6c800"),
+            ("pending",     "📦 待交站", "#E3F2FD", "#2196f3"),
+        ]
 
-        df_wl = load_work_logs()
-        if df_wl.empty:
-            st.warning("⚠️ 尚無工時資料，或 `work_logs` 資料表尚未建立。")
-            st.code("""
-CREATE TABLE work_logs (
-  id             bigint generated always as identity primary key,
-  order_no       text, process_name text, operator text,
-  start_time     timestamptz, end_time timestamptz,
-  actual_hours   numeric, standard_hours numeric,
-  notes text, created_at timestamptz default now()
-);
-INSERT INTO work_logs (order_no,process_name,operator,start_time,end_time,actual_hours,standard_hours) VALUES
-('WO-001','焊接','張三','2026-02-20 08:00','2026-02-20 12:00',4.0,3.5),
-('WO-002','噴漆','王五','2026-02-21 08:00','2026-02-21 11:30',3.5,2.5),
-('WO-003','組立','趙六','2026-02-24 08:00','2026-02-24 14:00',6.0,4.5);
-            """, language="sql")
-        else:
-            d1,d2,d3,d4 = st.columns(4)
-            mn,mx = df_wl["start_time"].dt.date.min(), df_wl["start_time"].dt.date.max()
-            with d1: date_from = st.date_input("開始日期",value=mn,min_value=mn,max_value=mx)
-            with d2: date_to   = st.date_input("結束日期",value=mx,min_value=mn,max_value=mx)
-            with d3: sel_op    = st.selectbox("人員",["全部人員"]+sorted(df_wl["operator"].dropna().unique().tolist()))
-            with d4: sel_proc  = st.selectbox("工序",["全部工序"]+sorted(df_wl["process_name"].dropna().unique().tolist()))
-            df_f = df_wl[(df_wl["start_time"].dt.date>=date_from)&(df_wl["start_time"].dt.date<=date_to)].copy()
-            if sel_op   != "全部人員": df_f = df_f[df_f["operator"]==sel_op]
-            if sel_proc != "全部工序": df_f = df_f[df_f["process_name"]==sel_proc]
-            if df_f.empty: st.warning("此條件無資料")
-            else:
-                df_f["效率比%"] = df_f.apply(lambda r: round(r["actual_hours"]/r["standard_hours"]*100,1) if pd.notna(r["standard_hours"]) and r["standard_hours"]>0 else None,axis=1)
-                df_f["超時"] = df_f["效率比%"].apply(lambda x: pd.notna(x) and x>120)
-                st.divider()
-                k1,k2,k3,k4,k5 = st.columns(5)
-                k1.metric("📋 工單數",df_f["order_no"].nunique()); k2.metric("👷 人員數",df_f["operator"].nunique())
-                k3.metric("⏱ 總實際工時",f"{df_f['actual_hours'].sum():.1f} h"); k4.metric("📐 總標準工時",f"{df_f['standard_hours'].sum():.1f} h")
-                avg_eff = df_f["效率比%"].mean()
-                k5.metric("📊 平均效率",f"{avg_eff:.1f}%" if pd.notna(avg_eff) else "N/A",delta=f"{avg_eff-100:.1f}%" if pd.notna(avg_eff) else None)
-                st.divider()
-                r1l,r1r = st.columns(2)
-                with r1l:
-                    op_h = df_f.groupby("operator")["actual_hours"].sum().reset_index().rename(columns={"operator":"人員","actual_hours":"累計工時(h)"}).sort_values("累計工時(h)",ascending=False)
-                    fig1 = px.bar(op_h,x="人員",y="累計工時(h)",color="累計工時(h)",color_continuous_scale="Blues",text="累計工時(h)")
-                    fig1.update_traces(texttemplate="%{text:.1f}h",textposition="outside"); fig1.update_layout(showlegend=False,height=350)
-                    st.markdown("#### 👷 人員累計工時"); st.plotly_chart(apply_font(fig1),use_container_width=True)
-                with r1r:
-                    ph = df_f.groupby("process_name")["actual_hours"].sum().reset_index().rename(columns={"process_name":"工序","actual_hours":"工時(h)"})
-                    fig2 = px.pie(ph,names="工序",values="工時(h)",hole=0.35,color_discrete_sequence=px.colors.qualitative.Set3)
-                    fig2.update_traces(textinfo="label+percent",textfont_size=12); fig2.update_layout(height=350)
-                    st.markdown("#### 🔧 工序工時佔比"); st.plotly_chart(apply_font(fig2),use_container_width=True)
-                dd = df_f.groupby(df_f["start_time"].dt.date).agg(actual=("actual_hours","sum"),standard=("standard_hours","sum")).reset_index().rename(columns={"start_time":"日期"})
-                dd["效率比%"] = (dd["actual"]/dd["standard"]*100).round(1)
-                fig3 = go.Figure()
-                fig3.add_trace(go.Bar(x=dd["日期"],y=dd["actual"],name="實際工時",marker_color="#2196f3"))
-                fig3.add_trace(go.Bar(x=dd["日期"],y=dd["standard"],name="標準工時",marker_color="#4caf50",opacity=0.6))
-                fig3.add_trace(go.Scatter(x=dd["日期"],y=dd["效率比%"],name="效率比%",yaxis="y2",mode="lines+markers",line=dict(color="#ff7043",width=2),marker=dict(size=6)))
-                fig3.update_layout(barmode="group",height=350,yaxis=dict(title="工時(小時)"),yaxis2=dict(title="效率比(%)",overlaying="y",side="right",showgrid=False),legend=dict(orientation="h",y=1.1))
-                st.markdown("#### 📈 每日效率比趨勢"); st.plotly_chart(apply_font(fig3),use_container_width=True)
-                st.divider(); st.markdown("#### ⚠️ 超時警報")
-                df_al = df_f[df_f["超時"]].copy()
-                if df_al.empty: st.success("✅ 無超時工單！")
+        cols = st.columns(len(KANBAN_COLS))
+
+        for col_ui, (st_key, st_label, col_bg, col_border) in zip(cols, KANBAN_COLS):
+            group = df_kb[df_kb["status_type"] == st_key]
+            with col_ui:
+                # 欄標題
+                st.markdown(
+                    f'''<div style="background:{col_border};color:#fff;text-align:center;
+                    padding:8px 4px;border-radius:8px 8px 0 0;font-weight:800;
+                    font-size:14px;margin-bottom:6px;">
+                    {st_label}<br><span style="font-size:11px;opacity:.85;">{len(group)} 筆</span>
+                    </div>''', unsafe_allow_html=True)
+
+                if group.empty:
+                    st.markdown(
+                        '<div style="background:#f9f9f9;border:2px dashed #ddd;border-radius:8px;'                        'padding:20px;text-align:center;color:#bbb;font-size:13px;">暫無</div>',
+                        unsafe_allow_html=True)
                 else:
-                    st.error(f"🔴 共 {len(df_al)} 筆超時工單")
-                    al = df_al[["order_no","process_name","operator","start_time","actual_hours","standard_hours","效率比%"]].rename(columns={"order_no":"工單","process_name":"工序","operator":"人員","start_time":"開始","actual_hours":"實際(h)","standard_hours":"標準(h)"}).sort_values("效率比%",ascending=False)
-                    al["開始"] = al["開始"].dt.strftime("%m-%d %H:%M")
-                    def hl(row):
-                        if row["效率比%"]>150: return ["background-color:#ffcdd2"]*len(row)
-                        return ["background-color:#fff9c4"]*len(row)
-                    st.dataframe(al.style.apply(hl,axis=1).format({"效率比%":"{:.1f}%"}),use_container_width=True,hide_index=True)
+                    import re as _kb_re
+                    for _, row in group.iterrows():
+                        # 工序格子
+                        proc_dots = ""
+                        for p_col, p_name in zip(PROCESS_COLS, PROCESS_NAMES):
+                            val = str(row.get(p_col,"")).strip()
+                            done = val and val not in ("None","nan","-")
+                            is_wk = False
+                            for h in _kb_re.findall(r"(\d{1,2}/\d{1,2})", val):
+                                if is_this_week_str(h): is_wk = True; break
+                            dot_bg = "#e53935" if is_wk else "#43a047" if done else "#e0e0e0"
+                            dot_color = "#fff" if (done or is_wk) else "#aaa"
+                            proc_dots += (f'<span title="{p_name}: {val}" style="display:inline-block;'                                f'width:22px;height:22px;line-height:22px;border-radius:50%;'                                f'background:{dot_bg};color:{dot_color};font-size:9px;'                                f'text-align:center;margin:1px;">{p_name[:1]}</span>')
 
-        with st.expander("➕ 新增工時記錄"):
-            with st.form("add_worklog"):
-                wc1,wc2,wc3 = st.columns(3)
-                with wc1: w_order=st.text_input("工單編號",placeholder="WO-001"); w_process=st.text_input("工序名稱",placeholder="焊接")
-                with wc2: w_op=st.text_input("執行人員",placeholder="張三"); w_std=st.number_input("標準工時(h)",min_value=0.0,step=0.5,value=2.0)
-                with wc3: w_start=st.datetime_input("開始時間",value=datetime.now()); w_end=st.datetime_input("結束時間",value=datetime.now())
-                w_notes=st.text_input("備註（選填）")
-                if st.form_submit_button("✅ 新增",type="primary"):
-                    try:
-                        actual=(w_end-w_start).total_seconds()/3600
-                        if actual<=0: st.error("結束時間需晚於開始時間")
-                        else:
-                            supabase.table("work_logs").insert({"order_no":w_order,"process_name":w_process,"operator":w_op,"start_time":w_start.isoformat(),"end_time":w_end.isoformat(),"actual_hours":round(actual,2),"standard_hours":w_std,"notes":w_notes}).execute()
-                            st.success(f"✅ 已新增！實際工時：{actual:.2f} h")
-                            st.cache_data.clear(); st.rerun()
-                    except Exception as e: st.error(f"新增失敗：{e}")
+                        # 交站日期
+                        handover_str = str(row.get("handover",""))
+                        if handover_str:
+                            m_h = _kb_re.search(r"\d{4}/(\d{1,2})/(\d{1,2})", handover_str)
+                            if m_h: handover_str = f"{int(m_h.group(1))}/{int(m_h.group(2))}"
+
+                        client = str(row.get("client",""))
+
+                        card_html = f'''
+                        <div style="background:{col_bg};border:1px solid {col_border};
+                             border-left:4px solid {col_border};border-radius:8px;
+                             padding:10px 10px 8px;margin-bottom:8px;
+                             box-shadow:0 1px 3px rgba(0,0,0,.08);">
+                          <div style="font-size:12px;font-weight:800;color:#0d2137;line-height:1.3;">
+                            {row.get("case_no","")}
+                          </div>
+                          <div style="font-size:11px;color:#333;margin:2px 0 4px;">
+                            {row.get("project_name","")}
+                          </div>
+                          <div style="font-size:10px;color:#666;margin-bottom:6px;">
+                            🏢 {client}{("&nbsp;&nbsp;🗓 "+handover_str) if handover_str else ""}
+                          </div>
+                          <div>{proc_dots}</div>
+                        </div>'''
+                        st.markdown(card_html, unsafe_allow_html=True)
