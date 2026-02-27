@@ -894,10 +894,11 @@ with page_tab2:
 
                 if not has_any: continue  # 沒有任何可計算的對
 
-                # 總天數：管撐製作到最後一個有日期的欄位
-                all_filled = [d for d in col_dates.values() if d is not None]
-                if len(all_filled) >= 2:
-                    proj["總天數"] = (max(all_filled) - min(all_filled)).days
+                # 總天數：只加總有實際計算出來的各段天數
+                segment_days = [v for k, v in proj.items()
+                                if "→" in str(k) and isinstance(v, (int, float))]
+                if segment_days:
+                    proj["總天數"] = sum(segment_days)
 
                 records.append(proj)
 
