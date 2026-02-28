@@ -881,34 +881,59 @@ with page_tab1:
     if st.session_state.get("show_pdf"):
         try:
             from fpdf import FPDF
-            import tempfile, os, urllib.request
+            import tempfile, os, urllib.request, re as _re_pdf
+
+            # ── 短日期轉換 ──────────────────────────────────
+            def _pdf_short(val):
+                v = str(val or "").strip()
+                if not v or v in ("None","nan","-"): return ""
+                m = _re_pdf.search(r"\d{4}/(\d{1,2})/(\d{1,2})", v)
+                if m: return f"{int(m.group(1))}/{int(m.group(2))}"
+                if _re_pdf.match(r"^\d{1,2}/\d{1,2}$", v): return v
+                return v
+
+            # ── 字型：多備援來源 ────────────────────────────
             font_path = "/tmp/NotoSansSC.otf"
             FONT_URLS = [
                 "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
                 "https://github.com/googlefonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+                "https://fonts.gstatic.com/ea/notosanstc/v1/NotoSansTC-Regular.otf",
             ]
-            if not os.path.exists(font_path):
-                with st.spinner("下載中文字型中..."):
+            font_ok = os.path.exists(font_path) and os.path.getsize(font_path) > 100_000
+            if not font_ok:
+                with st.spinner("下載中文字型中（首次需要約10秒）..."):
                     for url in FONT_URLS:
                         try:
                             urllib.request.urlretrieve(url, font_path)
-                            if os.path.getsize(font_path) > 100_000: break
+                            if os.path.getsize(font_path) > 100_000:
+                                font_ok = True; break
                             os.remove(font_path)
                         except: pass
+            if not font_ok:
+                st.error("❌ 字型下載失敗，請重試一次")
+                st.session_state["show_pdf"] = False
+                st.stop()
+
+            # ── 產生 PDF ────────────────────────────────────
+            DATE_KEYS_PDF = {"drawing","pipe_support","welding","nde","sandblast",
+                             "assembly","painting","pressure_test","handover"}
+            HEADERS = ["施工順序","完成率","備料","案號","工程名稱","業主","備註",
+                       "製造圖面","管撐","點焊","NDE","噴砂","組立","噴漆","試壓","交站","年份","窗口"]
+            KEYS    = ["status","completion","materials","case_no","project_name","client","tracking",
+                       "drawing","pipe_support","welding","nde","sandblast","assembly","painting",
+                       "pressure_test","handover","handover_year","contact"]
+            WIDTHS  = [20,11,7,22,55,13,30,13,11,18,11,11,11,11,11,15,9,13]
+            PDF_BG  = {"in_progress":(255,255,153),"pending":(204,232,255),
+                       "not_started":(255,255,255),"suspended":(255,224,178),"completed":(240,240,240)}
 
             pdf = FPDF(orientation="L", format="A3")
             pdf.set_auto_page_break(auto=True, margin=10)
             pdf.add_font("ZH", "", font_path)
-            HEADERS=["施工順序","完成率","備料","案號","工程名稱","業主","備註","製造圖面","管撐","點焊","NDE","噴砂","組立","噴漆","試壓","交站","交站年份","窗口"]
-            KEYS=["status","completion","materials","case_no","project_name","client","tracking","drawing","pipe_support","welding","nde","sandblast","assembly","painting","pressure_test","handover","handover_year","contact"]
-            WIDTHS=[20,11,7,22,55,13,30,13,11,18,11,11,11,11,11,15,9,13]
-            PDF_BG={"in_progress":(255,255,153),"pending":(204,232,255),"not_started":(255,255,255),"suspended":(255,224,178),"completed":(240,240,240)}
-            # 使用目前篩選後的 df（非全部）
+
             sections_for_pdf = SECTIONS if filter_section=="全部分區" else [filter_section]
             for sec in sections_for_pdf:
                 ds = df[df["section"]==sec] if not df.empty else pd.DataFrame()
                 if ds.empty: continue
-                # 篩選條件說明
                 filter_note = ""
                 if st.session_state.active_status:
                     labels = [STATUS_CONFIG[k]["label"] for k in st.session_state.active_status if k in STATUS_CONFIG]
@@ -916,23 +941,27 @@ with page_tab1:
                 if filter_year != "全部年份": filter_note += f"  年份：{filter_year}"
                 pdf.add_page()
                 pdf.set_font("ZH", size=13); pdf.set_text_color(10,35,80)
-                pdf.cell(0,9,f"【{sec}】  ({today})  共{len(ds)}筆{filter_note}", new_x="LMARGIN", new_y="NEXT"); pdf.ln(1)
+                pdf.cell(0,9,f"【{sec}】  ({today})  共{len(ds)}筆{filter_note}",
+                         new_x="LMARGIN", new_y="NEXT"); pdf.ln(1)
                 pdf.set_font("ZH", size=7); pdf.set_fill_color(29,71,157); pdf.set_text_color(255,255,255)
-                for h,w in zip(HEADERS,WIDTHS): pdf.cell(w,7,h,border=1,fill=True,align="C")
+                for h,w in zip(HEADERS,WIDTHS):
+                    pdf.cell(w,7,h,border=1,fill=True,align="C")
                 pdf.ln(); pdf.set_font("ZH",size=6); pdf.set_text_color(30,30,30)
                 for _,row in ds.iterrows():
                     rgb = PDF_BG.get(row.get("status_type",""),(255,255,255))
                     pdf.set_fill_color(*rgb)
                     for k,w in zip(KEYS,WIDTHS):
-                        val = str(row.get(k,"") or "")
-                        if len(val)>16: val=val[:15]+"…"
+                        raw = str(row.get(k,"") or "")
+                        val = _pdf_short(raw) if k in DATE_KEYS_PDF else raw
+                        if len(val) > 16: val = val[:15]+"…"
                         pdf.cell(w,6,val,border=1,fill=True)
                     pdf.ln()
+
             with tempfile.NamedTemporaryFile(delete=False,suffix=".pdf") as tmp:
                 pdf.output(tmp.name)
-                with open(tmp.name,"rb") as f: pdf_bytes=f.read()
+                with open(tmp.name,"rb") as f2: pdf_bytes=f2.read()
                 os.unlink(tmp.name)
-            fname=f"工程案執行進度_{datetime.now().strftime('%Y%m%d')}.pdf"
+            fname = f"工程案執行進度_{datetime.now().strftime('%Y%m%d')}.pdf"
             st.download_button("⬇ 下載 PDF", pdf_bytes, file_name=fname, mime="application/pdf")
             st.session_state["show_pdf"] = False
         except Exception as e:
